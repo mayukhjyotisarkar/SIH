@@ -1,0 +1,168 @@
+import re
+from typing import List
+from app.models import RedFlag, QAPair
+
+class RedFlagDetector:
+    """
+    Deterministic, high-specificity rule-based clinical emergency red flag detector.
+    Engineered with robust clause-level negation filtering to prevent false positives on
+    non-emergency symptoms (e.g. acidity, routine cough, osteoarthritis, standard headache,
+    isolated limb soreness, or denied alarm signs).
+    """
+
+    NEGATION_WORDS = [
+        "no", "not", "denies", "denied", "without", "never", "none",
+        "nahi", "nehi", "kono nei", "kono na", "illa", "ledu", "nkda",
+        "negative for", "ruled out", "no known", "no history of"
+    ]
+
+    # 1. Acute Coronary Syndrome (ACS) / True Cardiac Emergency
+    CARDIAC_CHEST_PAIN = re.compile(
+        r"(crushing\s*chest\s*pain|squeezing\s*chest|heavy\s*squeezing\s*pressure|severe\s*retrosternal\s*chest|elephant\s*sitting\s*on\s*chest|seene\s*me\s*tez\s*dard|chaati\s*me\s*bhari\s*dard|acute\s*chest\s*pain|chest\s*pain\s*since|chest\s*pain|chaati\s*me\s*dard)",
+        re.IGNORECASE
+    )
+    CARDIAC_RADIATION_LEFT = re.compile(
+        r"(radiat\w*\s*(down|to|into)?\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck)|spread\w*\s*(down|to|into)?\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck)|going\s*to\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck)|pain\s*in\s*left\s*arm\s*and\s*(chest|shoulder)|baayein\s*haath\s*me\s*dard\s*jaa\s*raha|left\s*haath\s*me\s*dard\s*jaa\s*raha)",
+        re.IGNORECASE
+    )
+    CARDIAC_DIAPHORESIS_DYSPNEA = re.compile(
+        r"(cold\s*diaphoresis|profuse\s*cold\s*sweat|heavy\s*cold\s*sweating|cold\s*sweat\w*|paseena.*ghabrahat.*dard|sweat\w*.*breathless.*chest)",
+        re.IGNORECASE
+    )
+
+    # 2. Acute Stroke / Code Stroke (FAST criteria - sudden focal deficit)
+    STROKE_FOCAL = re.compile(
+        r"(sudden\s*(facial\s*droop|face\s*droop|paralysis|one-sided\s*weakness|hemiparesis|slurr\w*\s*speech)|acute\s*slurr\w*\s*speech|slurred\s*speech|facial\s*droop|face\s*droop|one-sided\s*paralysis|weakness\s*in\s*one\s*arm\s*and\s*leg|munh\s*tedha|awaz\s*ladkharana|ek\s*taraf\s*ka\s*hissa\s*sunn)",
+        re.IGNORECASE
+    )
+
+    # 3. Severe Acute Airway / Respiratory Failure (Not mild cold/cough/exertional asthma)
+    RESPIRATORY_FAILURE = re.compile(
+        r"(cannot\s*breathe\s*at\s*all|severe\s*gasping\s*for\s*air|blue\s*lips|cyanosis|acute\s*asphyxia|dam\s*ghut\s*raha\s*hai|saans\s*bilkul\s*nahi\s*aarahi|choking\s*and\s*cannot\s*breathe)",
+        re.IGNORECASE
+    )
+
+    # 4. Active Massive Hemorrhage
+    ACTIVE_BLEEDING = re.compile(
+        r"(vomiting\s*(large\s*amount\s*of\s*)?blood|large\s*blood\s*in\s*vomit|hematemesis|coughing\s*up\s*(cups\s*of\s*)?fresh\s*blood|massive\s*hemoptysis|khoon\s*ki\s*ulti|khoon\s*nikal\s*raha\s*gale)",
+        re.IGNORECASE
+    )
+
+    # 5. Systemic Anaphylaxis / Airway Angioedema
+    ANAPHYLAXIS_SEVERE = re.compile(
+        r"(throat\s*closing\s*up|tongue\s*swelling.*cannot\s*breathe|gala\s*band\s*ho\s*raha|severe\s*anaphylaxis|airway\s*angioedema)",
+        re.IGNORECASE
+    )
+
+    # 6. Sepsis / Severe Meningitis
+    CNS_SEPSIS = re.compile(
+        r"(high\s*fever.*(neck\s*stiffness|stiff\s*neck|unconscious|altered\s*sensorium|convulsion)|fever.*altered\s*sensorium|fever.*convulsion|gardhan\s*akad.*behosh)",
+        re.IGNORECASE
+    )
+
+    @classmethod
+    def _clean_denials(cls, text: str) -> str:
+        """
+        Robust clause-level negation cleaner.
+        Splits text by punctuation/clauses and replaces any clause containing
+        a negation word (e.g. 'no breathlessness', 'no blood in vomit', 'denies chest pain')
+        with a sanitized marker to eliminate false positive triggers.
+        """
+        if not text:
+            return ""
+
+        # Break text into separate clauses by punctuation and major clause conjunctions
+        clauses = re.split(r"[,.;:\n\r()!?/\-\\]+|\band\s+no\b|\bbut\s+no\b|\bwith\s+no\b|\bwithout\b", text, flags=re.IGNORECASE)
+        sanitized_clauses = []
+
+        for clause in clauses:
+            cl = clause.strip()
+            if not cl:
+                continue
+
+            cl_lower = cl.lower()
+            # Check if this clause begins with or contains a negation phrase
+            is_negated = any(re.search(rf"\b{re.escape(neg)}\b", cl_lower) for neg in cls.NEGATION_WORDS)
+            
+            # Specific explicit exclusions
+            if is_negated or "normal" in cl_lower or "nkda" in cl_lower or "denies" in cl_lower:
+                sanitized_clauses.append(" [DENIED_OR_NORMAL] ")
+            else:
+                sanitized_clauses.append(cl)
+
+        return " . ".join(sanitized_clauses)
+
+    @classmethod
+    def evaluate(cls, chief_complaint: str, conversation_turns: List[QAPair]) -> RedFlag:
+        # Build comprehensive patient statements text
+        raw_text = (chief_complaint or "") + " " + " ".join(t.patientAnswer for t in conversation_turns)
+        cleaned_text = cls._clean_denials(raw_text)
+
+        # 1. Check for genuine Acute Coronary Syndrome
+        # Requires acute cardiac chest pain + (explicit radiation to left arm/shoulder/jaw OR acute cold diaphoresis)
+        has_cardiac_pain = bool(cls.CARDIAC_CHEST_PAIN.search(cleaned_text))
+        has_left_radiation = bool(cls.CARDIAC_RADIATION_LEFT.search(cleaned_text))
+        has_diaphoresis = bool(cls.CARDIAC_DIAPHORESIS_DYSPNEA.search(cleaned_text))
+
+        if has_cardiac_pain and (has_left_radiation or has_diaphoresis):
+            return RedFlag(
+                triggered=True,
+                reason="Potential Acute Coronary Syndrome Warning (Severe chest pain with left arm radiation or diaphoresis)",
+                action="IMMEDIATE CASUALTY TRIAGE: Urgent 12-lead ECG, Troponin, and direct physician assessment.",
+                urgency="emergency"
+            )
+
+        # 2. Check for True Acute Stroke
+        if cls.STROKE_FOCAL.search(cleaned_text):
+            return RedFlag(
+                triggered=True,
+                reason="Potential Acute Stroke Warning (Sudden focal neurological deficit / speech or facial impairment)",
+                action="URGENT CODE STROKE: Immediate non-contrast head CT and emergency neurological consult.",
+                urgency="emergency"
+            )
+
+        # 3. Check for Severe Respiratory Failure
+        if cls.RESPIRATORY_FAILURE.search(cleaned_text):
+            return RedFlag(
+                triggered=True,
+                reason="Severe Acute Airway/Respiratory Distress Warning",
+                action="IMMEDIATE TRIAGE: High-flow oxygen, SpO2 monitoring, rapid airway evaluation.",
+                urgency="emergency"
+            )
+
+        # 4. Check for Active Massive Hemorrhage
+        if cls.ACTIVE_BLEEDING.search(cleaned_text):
+            return RedFlag(
+                triggered=True,
+                reason="Acute Active Hemorrhage Warning (Hematemesis / Hemoptysis)",
+                action="URGENT EVALUATION: Hemodynamic stabilization, IV access, emergency GI/Pulmonary assessment.",
+                urgency="emergency"
+            )
+
+        # 5. Check for Anaphylaxis
+        if cls.ANAPHYLAXIS_SEVERE.search(cleaned_text):
+            return RedFlag(
+                triggered=True,
+                reason="Severe Anaphylaxis / Airway Swelling Warning",
+                action="EMERGENCY PROTOCOL: Intramuscular Epinephrine preparation and immediate casualty transfer.",
+                urgency="emergency"
+            )
+
+        # 6. Check for Sepsis / Meningismus
+        if cls.CNS_SEPSIS.search(cleaned_text):
+            return RedFlag(
+                triggered=True,
+                reason="High Fever with Altered Sensorium or Meningismus Warning",
+                action="URGENT EVALUATION: Blood cultures, prompt casualty clinical workup.",
+                urgency="emergency"
+            )
+
+        # Otherwise: Routine OPD Consultation
+        return RedFlag(
+            triggered=False,
+            reason="",
+            action="",
+            urgency="routine"
+        )
+
+red_flag_detector = RedFlagDetector()

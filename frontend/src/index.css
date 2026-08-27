@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-brand-50: #f0fdfa;
+    --color-brand-100: #ccfbf1;
+    --color-brand-500: #14b8a6;
+    --color-brand-600: #0d9488;
+    --color-brand-700: #0f766e;
+    --color-brand-900: #134e4a;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased font-sans selection:bg-teal-500 selection:text-white min-h-screen;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Accessible touch targets */
+  button, input, select, textarea {
+    touch-action: manipulation;
+  }
+}
+
+/* Custom pulsing waveforms for speech visualizer */
+@keyframes soundwave {
+  0%, 100% { height: 6px; }
+  50% { height: 28px; }
+}
+
+.animate-wave-1 { animation: soundwave 1.2s ease-in-out infinite 0.1s; }
+.animate-wave-2 { animation: soundwave 1.0s ease-in-out infinite 0.25s; }
+.animate-wave-3 { animation: soundwave 1.4s ease-in-out infinite 0.4s; }
+.animate-wave-4 { animation: soundwave 0.9s ease-in-out infinite 0.2s; }
+.animate-wave-5 { animation: soundwave 1.3s ease-in-out infinite 0.35s; }

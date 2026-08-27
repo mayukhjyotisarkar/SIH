@@ -1,0 +1,257 @@
+from typing import List, Dict, Optional, Any, Literal
+from pydantic import BaseModel, Field
+
+# --- Consent & Registration Models ---
+class ConsentDetails(BaseModel):
+    recordVoice: bool = True
+    storeDocuments: bool = True
+    shareHospital: bool = True
+
+class PatientRegistration(BaseModel):
+    abhaId: Optional[str] = None
+    fullName: str
+    age: int
+    gender: Literal["Male", "Female", "Other"]
+    phone: Optional[str] = ""
+    language: str = "en"
+    ayushMode: bool = False
+    consent: ConsentDetails = Field(default_factory=ConsentDetails)
+
+# --- Conversation & Question Models ---
+class QAPair(BaseModel):
+    questionId: str
+    field: str
+    questionText: str
+    patientAnswer: str
+    mode: Literal["voice", "tap", "staff-manual"] = "voice"
+    timestamp: str
+
+class AdaptiveQuestionResponse(BaseModel):
+    question: str
+    field: str
+    options: List[str]
+    done: bool = False
+    progressPercent: int = 15
+    source: Literal["llm", "fallback", "staff-manual"] = "fallback"
+    symptomCategory: Optional[str] = None
+    systemSummary: Optional[str] = None
+
+class PatientAnswerRequest(BaseModel):
+    answer: str
+    mode: Literal["voice", "tap", "staff-manual"] = "tap"
+    ayushMode: bool = False
+    field: Optional[str] = None
+    questionText: Optional[str] = None
+
+# --- Audio & Speech Models ---
+class AudioTranscriptionResponse(BaseModel):
+    transcript: str
+    detectedLanguage: str = "en-IN"
+    accent: Optional[str] = "Indian English"
+    confidence: float = 0.95
+    source: Literal["whisper", "gemini_audio", "browser_native", "simulated", "indic_conformer"] = "browser_native"
+    normalizedMedicalTerms: List[str] = Field(default_factory=list)
+
+# --- Department & Doctor Routing Models ---
+class DepartmentRouting(BaseModel):
+    department: str = "General Medicine"
+    departmentCode: str = "GEN_MED"
+    doctorName: str = "Dr. Subhash Chandra"
+    doctorTitle: str = "Senior Consultant Physician"
+    roomNumber: str = "Room 101"
+    floorLocation: str = "Ground Floor (Main OPD Block)"
+    isAmbiguous: bool = False
+    assignedBy: Literal["ai-triage", "staff-triage", "emergency-protocol"] = "ai-triage"
+    routingReason: str = "General clinical assessment and vitals evaluation."
+    confidence: float = 0.95
+
+# --- Red Flag Model ---
+class RedFlag(BaseModel):
+    triggered: bool = False
+    reason: str = ""
+    action: str = ""
+    urgency: Literal["routine", "urgent", "emergency"] = "routine"
+
+# --- Document & OCR Models ---
+class PriorInvestigation(BaseModel):
+    id: str
+    document: str
+    documentType: Literal["lab_report", "printed_prescription", "handwritten_prescription", "other"]
+    extracted: Dict[str, Any] = Field(default_factory=dict)
+    flag: Optional[str] = None
+    confidence: float = 0.95
+    isSample: bool = False
+    timestamp: str
+    imageUrl: Optional[str] = None
+    status: Literal["success", "needs_review", "failed"] = "success"
+    extractionSource: Literal["vision_llm", "local_ocr_fallback", "sample_curated", "manual_correction"] = "sample_curated"
+
+class DocumentManualCorrectionRequest(BaseModel):
+    documentId: str
+    extracted: Dict[str, Any]
+
+# --- Clinical Sub-Structures ---
+class HistoryOfPresentIllness(BaseModel):
+    onset: str = ""
+    site: str = ""
+    character: str = ""
+    radiation: str = ""
+    aggravating: str = ""
+    relieving: str = ""
+    associatedSymptoms: List[str] = Field(default_factory=list)
+    symptomCategory: Optional[str] = None
+    clinicalRedFlagsChecked: Optional[List[str]] = Field(default_factory=list)
+    ayushDetails: Optional[Dict[str, str]] = None
+
+class DrugAllergyHistory(BaseModel):
+    currentMedications: List[str] = Field(default_factory=list)
+    allergies: str = "No known drug allergies (NKDA)"
+
+class PersonalHistory(BaseModel):
+    diet: str = "Mixed"
+    smoking: str = "Non-smoker"
+    alcohol: str = "Non-drinker"
+
+# --- Main Patient Session Model ---
+class PatientVitals(BaseModel):
+    weightKg: Optional[str] = None
+    heightCm: Optional[str] = None
+    bmi: Optional[str] = None
+    bloodPressure: Optional[str] = None
+    pulseBpm: Optional[str] = None
+    temperatureF: Optional[str] = None
+    disclosureStatus: Literal["disclosed", "partially_disclosed", "declined"] = "disclosed"
+    nonDisclosureReason: Optional[str] = None
+    disclosureAlertAcknowledged: bool = False
+
+class PatientSession(BaseModel):
+    sessionId: str
+    patientId: str
+    visitId: str
+    tokenNumber: str
+    patientName: str
+    age: int
+    gender: str
+    language: str = "en"
+    ayushMode: bool = False
+    connectivityStatus: Literal["online", "degraded", "offline"] = "online"
+    flaggedForStaff: bool = False
+    chiefComplaint: str = ""
+    historyOfPresentIllness: HistoryOfPresentIllness = Field(default_factory=HistoryOfPresentIllness)
+    pastMedicalHistory: List[str] = Field(default_factory=list)
+    drugAllergyHistory: DrugAllergyHistory = Field(default_factory=DrugAllergyHistory)
+    familyHistory: List[str] = Field(default_factory=list)
+    personalHistory: PersonalHistory = Field(default_factory=PersonalHistory)
+    reviewOfSystems: str = ""
+    
+    # Mandatory Baseline OPD Vitals
+    vitals: PatientVitals = Field(default_factory=PatientVitals)
+    
+    # --- Nurse-Grade Clinical Synthesis Fields for Physician Dashboard ---
+    nurseSummary: Optional[str] = ""
+    pertinentPositives: List[str] = Field(default_factory=list)
+    pertinentNegatives: List[str] = Field(default_factory=list)
+    triageAcuity: Literal["Routine", "Semi-urgent", "Priority Emergency"] = "Routine"
+    nurseRecommendations: List[str] = Field(default_factory=list)
+
+    # --- Department & Doctor Routing ---
+    departmentRouting: DepartmentRouting = Field(default_factory=DepartmentRouting)
+    staffCallActive: bool = False
+    staffCallReason: Optional[str] = None
+
+    priorInvestigations: List[PriorInvestigation] = Field(default_factory=list)
+    redFlag: RedFlag = Field(default_factory=RedFlag)
+    assignedBed: Optional[str] = None
+    emergencyActionLog: List[str] = Field(default_factory=list)
+    fieldProvenance: Dict[str, str] = Field(default_factory=dict)
+    enteredByStaffId: Optional[str] = None
+    physicianReviewStatus: Literal["Pending confirmation", "Accepted", "Amended", "Rejected"] = "Pending confirmation"
+    physicianNotes: Optional[str] = ""
+    sectionReviews: Dict[str, Literal["accepted", "amended", "rejected"]] = Field(default_factory=dict)
+    conversationTurns: List[QAPair] = Field(default_factory=list)
+    createdAt: str
+    updatedAt: str
+    status: Literal["in_progress", "scanned", "confirmed", "in_physician_review", "completed"] = "in_progress"
+    version: int = 1
+
+# --- Emergency Dashboard Models ---
+class EmergencyActionRequest(BaseModel):
+    action: str
+    assignedBed: Optional[str] = None
+    notes: Optional[str] = None
+    dispatchedBy: Optional[str] = "Emergency Triage Officer"
+
+# --- Staff & Connectivity Models ---
+class StaffLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class StaffAccount(BaseModel):
+    staffId: str
+    username: str
+    fullName: str
+    role: str
+    department: str
+
+class StaffCallRequest(BaseModel):
+    reason: Optional[str] = "Patient requested triage assistance / Ambiguous symptoms"
+    kioskId: Optional[str] = "KIOSK-01"
+
+class DepartmentAssignmentRequest(BaseModel):
+    department: str
+    doctorName: Optional[str] = None
+    doctorTitle: Optional[str] = None
+    roomNumber: Optional[str] = None
+    floorLocation: Optional[str] = None
+    notes: Optional[str] = None
+    staffId: Optional[str] = None
+
+class StaffTakeoverRequest(BaseModel):
+    staffId: str
+    chiefComplaint: Optional[str] = None
+    historyOfPresentIllness: Optional[HistoryOfPresentIllness] = None
+    pastMedicalHistory: Optional[List[str]] = None
+    drugAllergyHistory: Optional[DrugAllergyHistory] = None
+    familyHistory: Optional[List[str]] = None
+    personalHistory: Optional[PersonalHistory] = None
+    reviewOfSystems: Optional[str] = None
+    manualNotes: Optional[str] = ""
+    expectedVersion: Optional[int] = None
+    forceOverride: bool = False
+
+class ConnectivityUpdateRequest(BaseModel):
+    status: Literal["online", "degraded", "offline"]
+    failCount: int = 0
+    clientTimestamp: str
+
+# --- Physician Review Models ---
+class PhysicianSectionReviewRequest(BaseModel):
+    sectionReviews: Dict[str, Literal["accepted", "amended", "rejected"]]
+    amendedData: Optional[Dict[str, Any]] = None
+    physicianNotes: Optional[str] = ""
+    overallStatus: Literal["Accepted", "Amended", "Rejected"] = "Accepted"
+
+# --- Clinical Decision Support System (CDSS) Models ---
+class DifferentialDiagnosis(BaseModel):
+    condition: str
+    icd10: Optional[str] = None
+    probability: Literal["High", "Moderate", "Consider / Low"] = "Moderate"
+    rationale: str
+
+class SuggestedDrug(BaseModel):
+    name: str
+    dosage: str
+    frequency: str
+    duration: str
+    rationale: str
+    contraindicationWarning: Optional[str] = None
+
+class CDSSResponse(BaseModel):
+    differentialDiagnoses: List[DifferentialDiagnosis] = Field(default_factory=list)
+    suggestedTreatments: List[SuggestedDrug] = Field(default_factory=list)
+    keyPointsToNotice: List[str] = Field(default_factory=list)
+    recommendedInvestigations: List[str] = Field(default_factory=list)
+    clinicalRationale: str = ""
+    source: Literal["gemini", "groq", "openrouter", "guideline_rules"] = "guideline_rules"
+    disclaimer: str = "AI Clinical Decision Support for doctor guidance only. Prescriptions and diagnoses are subject to attending physician's clinical discretion."
+
