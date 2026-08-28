@@ -79,8 +79,15 @@ export const StepScan: React.FC<StepScanProps> = ({
       id: 'sample_handwritten_rx',
       title: "4. Handwritten Doctor's Rx (General Medicine)",
       type: 'Handwritten',
-      desc: 'Cursive doctor handwriting — Honest Low Accuracy (68%) & Cross-Check Discrepancy Alerts',
-      badge: 'Low Accuracy Alert',
+      desc: 'Cursive doctor handwriting (URTI / Antibiotics) — Honest Low Accuracy (68%)',
+      badge: 'Needs Review',
+    },
+    {
+      id: 'sample_dr_biswas_rx',
+      title: "5. Dr. A. Biswas Handwritten Rx (Diabetes, Thyroid & Leg Pain)",
+      type: 'Doctor Cursive',
+      desc: 'Kolkata General Physician (Azulix 2, Ondero-D 10, Thyronorm 75, Uprise-D3 60K, Lubrijoint, Fenolip 145, Trinerve, FBS 69, TSH 2.71, BP 140/80)',
+      badge: 'Authentic Rx',
     },
   ];
 
@@ -585,9 +592,9 @@ export const StepScan: React.FC<StepScanProps> = ({
             {isEditing ? (
               /* Inline Editable Form for Extracted Fields */
               <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center justify-between border-b pb-2 flex-wrap gap-2">
                   <h4 className="text-xs font-bold uppercase text-slate-800">
-                    Manual Correction Editor
+                    Manual Correction & Clinical Editor
                   </h4>
                   <button
                     type="button"
@@ -599,121 +606,255 @@ export const StepScan: React.FC<StepScanProps> = ({
                   </button>
                 </div>
 
-                {/* Lab Investigations Editor */}
-                {editFormData.investigations && (
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-slate-700">Lab Investigations:</label>
-                    {editFormData.investigations.map((item: any, idx: number) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
-                        <input
-                          type="text"
-                          value={item.test || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.investigations];
-                            updated[idx].test = e.target.value;
-                            setEditFormData({ ...editFormData, investigations: updated });
-                          }}
-                          placeholder="Test Name"
-                          className="px-2 py-1 border rounded text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={item.value || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.investigations];
-                            updated[idx].value = e.target.value;
-                            setEditFormData({ ...editFormData, investigations: updated });
-                          }}
-                          placeholder="Observed Value"
-                          className="px-2 py-1 border rounded text-xs font-mono font-bold"
-                        />
-                        <input
-                          type="text"
-                          value={item.unit || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.investigations];
-                            updated[idx].unit = e.target.value;
-                            setEditFormData({ ...editFormData, investigations: updated });
-                          }}
-                          placeholder="Unit"
-                          className="px-2 py-1 border rounded text-xs"
-                        />
-                        <select
-                          value={item.flag || 'NORMAL'}
-                          onChange={(e) => {
-                            const updated = [...editFormData.investigations];
-                            updated[idx].flag = e.target.value;
-                            setEditFormData({ ...editFormData, investigations: updated });
-                          }}
-                          className="px-2 py-1 border rounded text-xs"
-                        >
-                          <option value="NORMAL">Normal</option>
-                          <option value="HIGH">High (Abnormal)</option>
-                          <option value="LOW">Low (Abnormal)</option>
-                        </select>
-                      </div>
-                    ))}
+                {/* 1-Tap Clinical Preset Matchers */}
+                <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                  <span className="text-[11px] font-bold text-indigo-900 block">
+                    ⚡ 1-Tap Clinical Presets & Quick Fill:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData({
+                          doctor_name: "Dr. A. Biswas, M.B.B.S. (Cal), D.N.B.(I), General Physician",
+                          clinic: "85, Rashbehari Avenue, Kolkata-700026 / New Swasti Clinic",
+                          patient_name: "Mrs. Mohua Dey",
+                          rx_date: "2026-05-22",
+                          diagnoses: [
+                            "Type 2 Diabetes Mellitus with Peripheral Symptoms (Pain in both legs)",
+                            "Hypothyroidism (On Thyronorm)",
+                            "Hypertriglyceridemia / Dyslipidemia",
+                            "Degenerative Joint / Lumbar Spine Spondylosis"
+                          ],
+                          investigations: [
+                            {"test": "Fasting Blood Sugar (FBS)", "value": "69", "unit": "mg/dL", "ref_range": "70 - 100", "flag": "LOW"},
+                            {"test": "Post-Prandial Sugar (PP)", "value": "96", "unit": "mg/dL", "ref_range": "70 - 140", "flag": "NORMAL"},
+                            {"test": "TSH (Thyroid Stimulating Hormone)", "value": "2.71", "unit": "uIU/mL", "ref_range": "0.4 - 4.2", "flag": "NORMAL"},
+                            {"test": "Blood Pressure (BP)", "value": "140/80", "unit": "mmHg", "ref_range": "< 120/80", "flag": "HIGH"}
+                          ],
+                          medications: [
+                            {"name": "Tab. Azulix 2 (Glimepiride 2mg)", "dosage": "1 tablet (2mg)", "frequency": "Before breakfast & dinner (Twice daily)", "duration": "Ongoing / 30 days", "instructions": "Take before meals for diabetes"},
+                            {"name": "Tab. Ondero-D 10 (Linagliptin + Dapagliflozin 10mg)", "dosage": "1 tablet", "frequency": "Once daily (After breakfast)", "duration": "Ongoing / 30 days", "instructions": "Take after morning meal"},
+                            {"name": "Tab. Thyronorm 75mcg (Levothyroxine)", "dosage": "1 tablet (75mcg)", "frequency": "Daily in empty stomach (Early morning)", "duration": "Ongoing / 30 days", "instructions": "Take with plain water 30 mins before tea/breakfast"},
+                            {"name": "Cap. Uprise D3 60K (Cholecalciferol 60,000 IU)", "dosage": "1 capsule (60K IU)", "frequency": "Once weekly", "duration": "8 to 12 weeks", "instructions": "Take weekly with milk after meals"},
+                            {"name": "Tab. Lubrijoint Plus (Glucosamine + Chondroitin)", "dosage": "1 tablet", "frequency": "Daily after food", "duration": "Ongoing", "instructions": "For joint and leg discomfort"},
+                            {"name": "Tab. Fenolip 145 / Stanlip 145 (Fenofibrate)", "dosage": "1 tablet (145mg)", "frequency": "Daily after dinner", "duration": "Ongoing", "instructions": "For triglyceride reduction"},
+                            {"name": "Cap. Trinerve / Nurokind Plus (Methylcobalamin Complex)", "dosage": "1 capsule", "frequency": "1 cap daily after dinner", "duration": "30 days", "instructions": "For peripheral nerve health and leg pain"}
+                          ],
+                          advice: "Blood tests for Fasting Sugar, PPBS, Triglycerides after 2 months. X-ray L-S Spine (AP & Lateral views) with Tab Cremalax on previous night."
+                        });
+                      }}
+                      className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs"
+                    >
+                      Dr. A. Biswas Rx (Diabetes, Thyroid & Leg Pain)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData({
+                          doctor_name: "Dr. Vivek Deshmukh, MD, DM (Cardiology)",
+                          clinic: "Fortis Escorts Heart Institute, Okhla",
+                          rx_date: "2026-08-15",
+                          diagnoses: ["Primary Hypertension Stage II", "Type 2 Diabetes Mellitus"],
+                          medications: [
+                            {"name": "Tab. Telmisartan 40mg", "dosage": "1 tablet", "frequency": "Once daily (Morning)", "duration": "30 days", "instructions": "Take after breakfast"},
+                            {"name": "Tab. Metformin 500mg SR", "dosage": "1 tablet", "frequency": "Twice daily after meals", "duration": "30 days", "instructions": "Take with dinner and breakfast"},
+                            {"name": "Tab. Atorvastatin 20mg", "dosage": "1 tablet", "frequency": "Once daily at bedtime", "duration": "30 days", "instructions": "Take at night"}
+                          ],
+                          advice: "Low salt, diabetic diet. Review after 1 month with repeat lipid panel."
+                        });
+                      }}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold transition-colors"
+                    >
+                      Fortis Cardiology Rx
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData({
+                          laboratory: "Apollo Diagnostics & PathLabs, New Delhi",
+                          test_date: "2026-08-20",
+                          investigations: [
+                            {"test": "Fasting Blood Sugar (FBS)", "value": "148", "unit": "mg/dL", "ref_range": "70 - 100", "flag": "HIGH"},
+                            {"test": "HbA1c (Glycated Hemoglobin)", "value": "8.2", "unit": "%", "ref_range": "< 5.7", "flag": "HIGH"},
+                            {"test": "Serum Total Cholesterol", "value": "235", "unit": "mg/dL", "ref_range": "< 200", "flag": "HIGH"},
+                            {"test": "LDL Cholesterol", "value": "164", "unit": "mg/dL", "ref_range": "< 100", "flag": "HIGH"},
+                            {"test": "HDL Cholesterol", "value": "38", "unit": "mg/dL", "ref_range": "> 40", "flag": "LOW"},
+                            {"test": "Serum Creatinine", "value": "0.95", "unit": "mg/dL", "ref_range": "0.7 - 1.2", "flag": "NORMAL"}
+                          ],
+                          clinical_impression: "Dyslipidemia with uncontrolled type 2 glycemic indices."
+                        });
+                      }}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold transition-colors"
+                    >
+                      Apollo Metabolic Lab Panel
+                    </button>
                   </div>
-                )}
+                </div>
+
+                {/* Lab Investigations Editor */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">Lab Investigations & Vitals:</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = editFormData.investigations || [];
+                        setEditFormData({
+                          ...editFormData,
+                          investigations: [...cur, { test: "", value: "", unit: "mg/dL", ref_range: "Standard", flag: "NORMAL" }]
+                        });
+                      }}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 px-2 py-0.5 rounded border border-teal-200"
+                    >
+                      + Add Lab Test / Vital
+                    </button>
+                  </div>
+                  {editFormData.investigations && editFormData.investigations.map((item: any, idx: number) => (
+                    <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-2.5 rounded-lg border border-slate-200 items-center">
+                      <input
+                        type="text"
+                        value={item.test || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.investigations];
+                          updated[idx].test = e.target.value;
+                          setEditFormData({ ...editFormData, investigations: updated });
+                        }}
+                        placeholder="Test Name (e.g. FBS, TSH, BP)"
+                        className="sm:col-span-4 px-2 py-1.5 border rounded text-xs"
+                      />
+                      <input
+                        type="text"
+                        value={item.value || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.investigations];
+                          updated[idx].value = e.target.value;
+                          setEditFormData({ ...editFormData, investigations: updated });
+                        }}
+                        placeholder="Value (e.g. 69)"
+                        className="sm:col-span-3 px-2 py-1.5 border rounded text-xs font-mono font-bold"
+                      />
+                      <input
+                        type="text"
+                        value={item.unit || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.investigations];
+                          updated[idx].unit = e.target.value;
+                          setEditFormData({ ...editFormData, investigations: updated });
+                        }}
+                        placeholder="Unit (e.g. mg/dL, mmHg)"
+                        className="sm:col-span-2 px-2 py-1.5 border rounded text-xs"
+                      />
+                      <select
+                        value={item.flag || 'NORMAL'}
+                        onChange={(e) => {
+                          const updated = [...editFormData.investigations];
+                          updated[idx].flag = e.target.value;
+                          setEditFormData({ ...editFormData, investigations: updated });
+                        }}
+                        className="sm:col-span-2 px-2 py-1.5 border rounded text-xs"
+                      >
+                        <option value="NORMAL">Normal</option>
+                        <option value="HIGH">High</option>
+                        <option value="LOW">Low</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = editFormData.investigations.filter((_: any, i: number) => i !== idx);
+                          setEditFormData({ ...editFormData, investigations: updated });
+                        }}
+                        className="sm:col-span-1 p-1 text-slate-400 hover:text-rose-600 rounded text-center"
+                        title="Remove Test"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Prescription Medications Editor */}
-                {editFormData.medications && (
-                  <div className="space-y-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-slate-700">Prescription Medications:</label>
-                    {editFormData.medications.map((m: any, idx: number) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
-                        <input
-                          type="text"
-                          value={m.name || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.medications];
-                            updated[idx].name = e.target.value;
-                            setEditFormData({ ...editFormData, medications: updated });
-                          }}
-                          placeholder="Medicine Name"
-                          className="px-2 py-1 border rounded text-xs font-bold"
-                        />
-                        <input
-                          type="text"
-                          value={m.dosage || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.medications];
-                            updated[idx].dosage = e.target.value;
-                            setEditFormData({ ...editFormData, medications: updated });
-                          }}
-                          placeholder="Dosage (e.g. 1 tab)"
-                          className="px-2 py-1 border rounded text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={m.frequency || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.medications];
-                            updated[idx].frequency = e.target.value;
-                            setEditFormData({ ...editFormData, medications: updated });
-                          }}
-                          placeholder="Frequency (e.g. TID)"
-                          className="px-2 py-1 border rounded text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={m.duration || ''}
-                          onChange={(e) => {
-                            const updated = [...editFormData.medications];
-                            updated[idx].duration = e.target.value;
-                            setEditFormData({ ...editFormData, medications: updated });
-                          }}
-                          placeholder="Duration (e.g. 5 days)"
-                          className="px-2 py-1 border rounded text-xs text-amber-900 font-semibold"
-                        />
-                      </div>
-                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = editFormData.medications || [];
+                        setEditFormData({
+                          ...editFormData,
+                          medications: [...cur, { name: "", dosage: "1 tablet", frequency: "Daily after breakfast", duration: "30 days", instructions: "" }]
+                        });
+                      }}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 px-2 py-0.5 rounded border border-teal-200"
+                    >
+                      + Add Medication Row
+                    </button>
                   </div>
-                )}
+                  {editFormData.medications && editFormData.medications.map((m: any, idx: number) => (
+                    <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-2.5 rounded-lg border border-slate-200 items-center">
+                      <input
+                        type="text"
+                        value={m.name || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.medications];
+                          updated[idx].name = e.target.value;
+                          setEditFormData({ ...editFormData, medications: updated });
+                        }}
+                        placeholder="Medicine Name (e.g. Tab Azulix 2, Thyronorm 75)"
+                        className="sm:col-span-4 px-2 py-1.5 border rounded text-xs font-bold"
+                      />
+                      <input
+                        type="text"
+                        value={m.dosage || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.medications];
+                          updated[idx].dosage = e.target.value;
+                          setEditFormData({ ...editFormData, medications: updated });
+                        }}
+                        placeholder="Dosage (e.g. 1 tab)"
+                        className="sm:col-span-2 px-2 py-1.5 border rounded text-xs"
+                      />
+                      <input
+                        type="text"
+                        value={m.frequency || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.medications];
+                          updated[idx].frequency = e.target.value;
+                          setEditFormData({ ...editFormData, medications: updated });
+                        }}
+                        placeholder="Frequency (e.g. Before breakfast & dinner)"
+                        className="sm:col-span-3 px-2 py-1.5 border rounded text-xs"
+                      />
+                      <input
+                        type="text"
+                        value={m.duration || ''}
+                        onChange={(e) => {
+                          const updated = [...editFormData.medications];
+                          updated[idx].duration = e.target.value;
+                          setEditFormData({ ...editFormData, medications: updated });
+                        }}
+                        placeholder="Duration (e.g. 30 days)"
+                        className="sm:col-span-2 px-2 py-1.5 border rounded text-xs text-amber-900 font-semibold"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = editFormData.medications.filter((_: any, i: number) => i !== idx);
+                          setEditFormData({ ...editFormData, medications: updated });
+                        }}
+                        className="sm:col-span-1 p-1 text-slate-400 hover:text-rose-600 rounded text-center"
+                        title="Remove Medicine"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Clinical Impression / Advice Editor */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Clinical Advice / Impression:</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Clinical Advice / Impression / Investigations Ordered:</label>
                   <textarea
                     rows={2}
                     value={editFormData.clinical_impression || editFormData.advice || ''}

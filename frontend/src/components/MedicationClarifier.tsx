@@ -216,21 +216,23 @@ export const MedicationClarifier: React.FC<MedicationClarifierProps> = ({
     );
   }
 
-  // If 0 unclear medications -> All Verified State
+  // If 0 unclear medications or completed
   if (plan && !plan.shouldAskPatient) {
     return (
-      <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-300 flex items-center justify-between text-emerald-950 shadow-xs">
+      <div className="p-4 bg-teal-50/80 rounded-2xl border border-teal-300 flex items-center justify-between text-teal-950 shadow-xs">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-bold text-emerald-950">All Extracted Medications Clinically Verified</div>
-            <div className="text-[11px] text-emerald-700">High confidence extraction across all prescription lines. Ready for physician review.</div>
+            <div className="text-xs font-bold text-teal-950">Prescription Medications Transcribed & Grounded</div>
+            <div className="text-[11px] text-teal-800">
+              Dosages, schedules, and duration guidelines formatted for physician review.
+            </div>
           </div>
         </div>
-        <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-200 text-emerald-900 rounded-full border border-emerald-300">
-          100% Reliable
+        <span className="text-[10px] font-bold px-2.5 py-1 bg-teal-200/80 text-teal-900 rounded-full border border-teal-300">
+          Ready for OPD Review
         </span>
       </div>
     );
