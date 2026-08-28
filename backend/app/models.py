@@ -75,6 +75,7 @@ class RedFlag(BaseModel):
     reason: str = ""
     action: str = ""
     urgency: Literal["routine", "urgent", "emergency"] = "routine"
+    category: str = "general"
 
 # --- Document & OCR Models ---
 class MedicationConfidence(BaseModel):

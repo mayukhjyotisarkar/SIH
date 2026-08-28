@@ -18,15 +18,15 @@ class RedFlagDetector:
 
     # 1. Acute Coronary Syndrome (ACS) / True Cardiac Emergency
     CARDIAC_CHEST_PAIN = re.compile(
-        r"(crushing\s*chest\s*pain|squeezing\s*chest|heavy\s*squeezing\s*pressure|severe\s*retrosternal\s*chest|elephant\s*sitting\s*on\s*chest|seene\s*me\s*tez\s*dard|chaati\s*me\s*bhari\s*dard|acute\s*chest\s*pain|chest\s*pain\s*since|chest\s*pain|chaati\s*me\s*dard)",
+        r"(crushing\s*chest\s*pain|squeezing\s*chest|heavy\s*squeezing\s*pressure|severe\s*retrosternal\s*chest|elephant\s*sitting\s*on\s*chest|crushing\s*heavy\s*chest|seene\s*me\s*tez\s*dard|chaati\s*me\s*bhari\s*dard|acute\s*chest\s*pain|chest\s*pain\s*since|chest\s*pain|chaati\s*me\s*dard)",
         re.IGNORECASE
     )
     CARDIAC_RADIATION_LEFT = re.compile(
-        r"(radiat\w*\s*(down|to|into)?\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck)|spread\w*\s*(down|to|into)?\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck)|going\s*to\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck)|pain\s*in\s*left\s*arm\s*and\s*(chest|shoulder)|baayein\s*haath\s*me\s*dard\s*jaa\s*raha|left\s*haath\s*me\s*dard\s*jaa\s*raha)",
+        r"(radiat\w*\s*(down|to|into)?\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck|back)|spread\w*\s*(down|to|into)?\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck|back)|going\s*to\s*(my\s*)?(left\s*arm|left\s*shoulder|jaw|neck|back)|pain\s*in\s*left\s*arm\s*and\s*(chest|shoulder)|baayein\s*haath\s*me\s*dard\s*jaa\s*raha|left\s*haath\s*me\s*dard\s*jaa\s*raha)",
         re.IGNORECASE
     )
     CARDIAC_DIAPHORESIS_DYSPNEA = re.compile(
-        r"(cold\s*diaphoresis|profuse\s*cold\s*sweat|heavy\s*cold\s*sweating|cold\s*sweat\w*|paseena.*ghabrahat.*dard|sweat\w*.*breathless.*chest)",
+        r"(cold\s*diaphoresis|profuse\s*cold\s*sweat|heavy\s*cold\s*sweating|cold\s*sweat\w*|cold\s*sweat|paseena.*ghabrahat.*dard|sweat\w*.*breathless.*chest)",
         re.IGNORECASE
     )
 
@@ -42,21 +42,27 @@ class RedFlagDetector:
         re.IGNORECASE
     )
 
-    # 4. Active Massive Hemorrhage
+    # 4. Active Massive Hemorrhage / Upper GI Bleed
     ACTIVE_BLEEDING = re.compile(
-        r"(vomiting\s*(large\s*amount\s*of\s*)?blood|large\s*blood\s*in\s*vomit|hematemesis|coughing\s*up\s*(cups\s*of\s*)?fresh\s*blood|massive\s*hemoptysis|khoon\s*ki\s*ulti|khoon\s*nikal\s*raha\s*gale)",
+        r"(vomiting\s*(fresh\s*|large\s*amount\s*of\s*)?blood|blood\s*in\s*vomit|hematemesis|tarry\s*stools|dark\s*black\s*tarry|melena|coughing\s*up\s*(cups\s*of\s*)?fresh\s*blood|massive\s*hemoptysis|khoon\s*ki\s*ulti|khoon\s*nikal\s*raha\s*gale)",
         re.IGNORECASE
     )
 
     # 5. Systemic Anaphylaxis / Airway Angioedema
     ANAPHYLAXIS_SEVERE = re.compile(
-        r"(throat\s*closing\s*up|tongue\s*swelling.*cannot\s*breathe|gala\s*band\s*ho\s*raha|severe\s*anaphylaxis|airway\s*angioedema)",
+        r"(throat\s*closing\s*up|swelling\s*in\s*throat|throat\s*swelling|tongue\s*swelling|facial\s*hives|inability\s*to\s*breathe.*(nuts|peanut|food|sting)|severe\s*anaphylaxis|airway\s*angioedema)",
         re.IGNORECASE
     )
 
     # 6. Sepsis / Severe Meningitis
     CNS_SEPSIS = re.compile(
         r"(high\s*fever.*(neck\s*stiffness|stiff\s*neck|unconscious|altered\s*sensorium|convulsion)|fever.*altered\s*sensorium|fever.*convulsion|gardhan\s*akad.*behosh)",
+        re.IGNORECASE
+    )
+
+    # 7. Acute Psychiatric Crisis / Self-Harm
+    PSYCHIATRIC_CRISIS = re.compile(
+        r"(thoughts\s*of\s*suicide|suicidal\s*ideation|self\s*harm|want\s*to\s*kill\s*myself|end\s*my\s*life|suicide\s*and\s*self\s*harm|overdose)",
         re.IGNORECASE
     )
 
@@ -107,9 +113,10 @@ class RedFlagDetector:
         if has_cardiac_pain and (has_left_radiation or has_diaphoresis):
             return RedFlag(
                 triggered=True,
-                reason="Potential Acute Coronary Syndrome Warning (Severe chest pain with left arm radiation or diaphoresis)",
+                reason="Potential Acute Coronary Syndrome Warning (Severe chest pain with left arm/jaw radiation or cold diaphoresis)",
                 action="IMMEDIATE CASUALTY TRIAGE: Urgent 12-lead ECG, Troponin, and direct physician assessment.",
-                urgency="emergency"
+                urgency="emergency",
+                category="cardiac"
             )
 
         # 2. Check for True Acute Stroke
@@ -118,7 +125,8 @@ class RedFlagDetector:
                 triggered=True,
                 reason="Potential Acute Stroke Warning (Sudden focal neurological deficit / speech or facial impairment)",
                 action="URGENT CODE STROKE: Immediate non-contrast head CT and emergency neurological consult.",
-                urgency="emergency"
+                urgency="emergency",
+                category="neurological"
             )
 
         # 3. Check for Severe Respiratory Failure
@@ -127,16 +135,18 @@ class RedFlagDetector:
                 triggered=True,
                 reason="Severe Acute Airway/Respiratory Distress Warning",
                 action="IMMEDIATE TRIAGE: High-flow oxygen, SpO2 monitoring, rapid airway evaluation.",
-                urgency="emergency"
+                urgency="emergency",
+                category="respiratory"
             )
 
-        # 4. Check for Active Massive Hemorrhage
+        # 4. Check for Active Massive Hemorrhage / Upper GI Bleed
         if cls.ACTIVE_BLEEDING.search(cleaned_text):
             return RedFlag(
                 triggered=True,
-                reason="Acute Active Hemorrhage Warning (Hematemesis / Hemoptysis)",
+                reason="Acute Active Hemorrhage Warning (Hematemesis / Melena / Hemoptysis)",
                 action="URGENT EVALUATION: Hemodynamic stabilization, IV access, emergency GI/Pulmonary assessment.",
-                urgency="emergency"
+                urgency="emergency",
+                category="hemorrhage"
             )
 
         # 5. Check for Anaphylaxis
@@ -145,16 +155,28 @@ class RedFlagDetector:
                 triggered=True,
                 reason="Severe Anaphylaxis / Airway Swelling Warning",
                 action="EMERGENCY PROTOCOL: Intramuscular Epinephrine preparation and immediate casualty transfer.",
-                urgency="emergency"
+                urgency="emergency",
+                category="anaphylaxis"
             )
 
-        # 6. Check for Sepsis / Meningismus
+        # 6. Check for Psychiatric Crisis / Self-Harm
+        if cls.PSYCHIATRIC_CRISIS.search(cleaned_text):
+            return RedFlag(
+                triggered=True,
+                reason="High-Acuity Psychiatric Crisis / Suicide Risk Alert",
+                action="IMMEDIATE PSYCHIATRIC SAFETY PROTOCOL: Continuous direct observation and urgent psychiatric consult.",
+                urgency="emergency",
+                category="psychiatric"
+            )
+
+        # 7. Check for Sepsis / Meningismus
         if cls.CNS_SEPSIS.search(cleaned_text):
             return RedFlag(
                 triggered=True,
                 reason="High Fever with Altered Sensorium or Meningismus Warning",
                 action="URGENT EVALUATION: Blood cultures, prompt casualty clinical workup.",
-                urgency="emergency"
+                urgency="emergency",
+                category="sepsis"
             )
 
         # Otherwise: Routine OPD Consultation
@@ -162,7 +184,8 @@ class RedFlagDetector:
             triggered=False,
             reason="",
             action="",
-            urgency="routine"
+            urgency="routine",
+            category="general"
         )
 
 red_flag_detector = RedFlagDetector()

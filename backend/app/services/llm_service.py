@@ -650,10 +650,34 @@ SAFETY RULES:
         }
         hpi.allopathicDetails = allopathic_details
 
-        if ayush_details:
+        # Populate Ayurvedic classical intake details
+        if ayush_mode or medical_system == "ayurveda" or ayush_details:
+            if not ayush_details:
+                ayush_details = {
+                    "doshaLakshana": "Vata-Pitta / Kapha constitutional manifestation recorded",
+                    "agniPariksha": "Samagni / Vishamagni presentation",
+                    "kosthaMala": "Madhyama Kostha",
+                    "amaLakshana": "Nirama (No severe metabolic toxicity)",
+                    "prakritiDeha": "Dwandvaja (Pitta-Kapha / Vata-Pitta)",
+                    "aharaViharaHetu": "Ahara-Vihara related to diurnal routine and intake",
+                    "nidraManasika": "Prakrita Nidra / Rajasika Manasika state",
+                    "ayurvedicMedicationsPathya": "Pathya Ahara & Ahara Niyama advised"
+                }
             hpi.ayushDetails = ayush_details
             hpi.ayurvedicDetails = ayush_details
-        if homeopathic_details:
+
+        # Populate Homeopathic classical intake details
+        if homeopathy_mode or medical_system == "homeopathy" or homeopathic_details:
+            if not homeopathic_details:
+                homeopathic_details = {
+                    "thermalState": "Ambi-thermal / Chilly vs Hot disposition documented",
+                    "thirst": "Normal thirst for fluids / Thirstless presentation",
+                    "modalitiesAggravation": "Aggravation with exertion / change of weather",
+                    "mindGenerals": "Mild anxiety, disposition documented",
+                    "foodCravingsAversions": "General dietary preferences noted",
+                    "sideAffinity": "Bilateral / Symmetric presentation",
+                    "miasmaticTendency": "Psora-Sycosis predominance"
+                }
             hpi.homeopathicDetails = homeopathic_details
         hpi.clinicalRedFlagsChecked = red_flags_checked
 

@@ -125,6 +125,13 @@ async def submit_answer(session_id: str, req: PatientAnswerRequest):
             timestamp=datetime.now().strftime("%H:%M:%S")
         ))
 
+    if req.medicalSystem:
+        session.medicalSystem = req.medicalSystem
+        if req.medicalSystem == "ayurveda":
+            session.ayushMode = True
+        elif req.medicalSystem == "homeopathy":
+            session.homeopathyMode = True
+
     # 1. Non-LLM Red Flag Safety Check (Independent of LLM)
     red_flag = red_flag_detector.evaluate(session.chiefComplaint, session.conversationTurns)
     session.redFlag = red_flag
