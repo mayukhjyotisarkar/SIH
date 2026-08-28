@@ -49,15 +49,22 @@ export const StepScan: React.FC<StepScanProps> = ({
       badge: 'High Anomaly',
     },
     {
+      id: 'sample_pdf_report',
+      title: '2. Digital PDF Pathology Report (Max Lab Saket)',
+      type: 'Digital PDF',
+      desc: 'Multi-parameter PDF with Triglycerides (210 mg/dL), Uric Acid & Glucose markers',
+      badge: 'PDF Scan',
+    },
+    {
       id: 'sample_printed_rx',
-      title: '2. Printed Prescription (Cardiology OPD)',
+      title: '3. Printed Prescription (Cardiology OPD)',
       type: 'Printed Rx',
       desc: 'Anti-hypertensive & anti-diabetic medications (Telmisartan, Metformin, Atorvastatin)',
       badge: 'Clear Print',
     },
     {
       id: 'sample_handwritten_rx',
-      title: "3. Handwritten Doctor's Rx (General Medicine)",
+      title: "4. Handwritten Doctor's Rx (General Medicine)",
       type: 'Handwritten',
       desc: 'Cursive doctor handwriting (Amoxicillin, Pan-40, Dolo 650) — Tests review state',
       badge: 'Needs Review',
@@ -98,7 +105,7 @@ export const StepScan: React.FC<StepScanProps> = ({
           {t.scanTitle}
         </h2>
         <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-          Attach previous doctor prescriptions, discharge summaries, or laboratory test reports. Our Vision-AI transcribes and flags abnormalities.
+          Attach previous doctor prescriptions, discharge summaries, or digital PDF/printed laboratory test reports. Our Vision-AI transcribes and flags abnormalities.
         </p>
 
         {/* Dual Path Chooser: Real Upload vs Sample Demo Document */}
@@ -112,15 +119,15 @@ export const StepScan: React.FC<StepScanProps> = ({
               </div>
               <h3 className="text-lg font-bold text-slate-900">{t.scanRealUpload}</h3>
               <p className="text-xs text-slate-600">
-                Upload a photo or scanned image from camera/device (PNG, JPG, JPEG, WEBP).
+                Upload a document photo, scanned image, or digital PDF report (PDF, PNG, JPG, JPEG, WEBP).
               </p>
             </div>
             <label className="mt-4 inline-flex items-center justify-center px-4 py-3 bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold rounded-xl cursor-pointer shadow-md transition-all min-h-[48px]">
               <Upload className="w-4 h-4 mr-2" />
-              <span>Choose Document Photo</span>
+              <span>Choose Document Photo / PDF</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.pdf"
                 onChange={handleFileUpload}
                 disabled={isLoading}
                 className="hidden"
@@ -137,7 +144,7 @@ export const StepScan: React.FC<StepScanProps> = ({
               <div>
                 <h3 className="text-lg font-bold text-slate-900">{t.scanSampleMode}</h3>
                 <p className="text-xs text-slate-600">
-                  Select a bundled sample image to test the genuine extraction pipeline without physical paperwork:
+                  Select a bundled sample image or digital PDF report to test the genuine extraction pipeline without physical paperwork:
                 </p>
               </div>
             </div>

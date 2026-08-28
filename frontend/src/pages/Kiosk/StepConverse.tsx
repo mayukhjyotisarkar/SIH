@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Mic, MicOff, Volume2, Sparkles, AlertTriangle, 
+  Mic, MicOff, Volume2, Sparkles, AlertTriangle, ShieldAlert,
   ArrowLeft, ArrowRight, CornerDownLeft, Loader2, 
   CheckCircle2, RefreshCw, HeartPulse, Globe, Languages,
   Activity, ShieldCheck, Stethoscope, BellRing, UserCheck,
@@ -300,8 +300,11 @@ export const StepConverse: React.FC<StepConverseProps> = ({
   };
 
   // Determine specialty category label
+  const isHomeopathy = Boolean(session.homeopathyMode || session.medicalSystem === 'homeopathy');
+  const isAyurveda = Boolean(session.ayushMode || session.medicalSystem === 'ayurveda');
+
   const symptomCategoryLabel = currentQuestion.symptomCategory || 
-    (session.ayushMode ? 'AYUSH Ayurveda' : 'Clinical Specialty Triage');
+    (isHomeopathy ? 'AYUSH Homeopathy' : isAyurveda ? 'AYUSH Ayurveda' : 'Clinical Specialty Triage');
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -318,48 +321,58 @@ export const StepConverse: React.FC<StepConverseProps> = ({
                 <span className="text-xs font-black uppercase tracking-wider bg-white text-rose-700 px-2.5 py-0.5 rounded shadow-sm">
                   PRIORITY EMERGENCY RED FLAG DETECTED
                 </span>
-                <span className="text-xs text-rose-200 font-bold font-mono">
-                  Routine Questions Bypassed
+                <span className="text-xs font-mono text-rose-100">
+                  Acuity: {redFlag.urgency?.toUpperCase() || 'EMERGENCY'}
                 </span>
               </div>
-              <h3 className="text-2xl font-black">{redFlag.reason}</h3>
-              <p className="text-sm text-rose-100 font-semibold">{redFlag.action}</p>
-              <p className="text-xs text-white/90 pt-1 font-medium">
-                ⚠️ Standard OPD vitals and questionnaires are bypassed to prevent critical delay. Casualty medical officer and resuscitation bay are notified immediately.
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+                {redFlag.reason || "Acute clinical warning signs observed during pre-consultation."}
+              </h2>
+              <p className="text-xs sm:text-sm text-rose-100 font-medium leading-relaxed">
+                Action Required: {redFlag.action || "Patient is being prioritized for casualty medical officer evaluation."}
               </p>
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-rose-400/40">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-rose-100">
+              <ShieldAlert className="w-4 h-4 text-white" />
+              <span>Routine OPD intake paused. Emergency protocol activated.</span>
+            </div>
             <button
               type="button"
-              onClick={onProceedToScan}
-              className="px-6 py-3 bg-white text-rose-700 hover:bg-rose-50 font-black text-sm rounded-xl shadow-xl transition-all flex items-center space-x-2"
+              onClick={() => window.location.href = '/emergency'}
+              className="px-4 py-2 bg-white text-rose-700 hover:bg-rose-50 text-xs font-black rounded-xl shadow-lg flex items-center space-x-1.5 transition-all"
             >
-              <span>Proceed to Casualty Emergency Triage</span>
+              <span>Transfer to Casualty Desk</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. Interactive Conversational Intake Card */}
+      {/* Main Conversation Container */}
       <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
         
-        {/* Card Header with Specialty Pill & Nurse Call */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800">
+        {/* Top Bar: Progress & Status */}
+        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-teal-600 rounded-xl text-white">
-              <Stethoscope className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-teal-600/80 flex items-center justify-center text-white font-bold text-sm">
+              Q
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-teal-400">
+                <span className="bg-teal-900/80 border border-teal-400 text-teal-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {symptomCategoryLabel}
                 </span>
-                {session.ayushMode && (
+                {isHomeopathy && (
+                  <span className="bg-cyan-900/80 border border-cyan-400 text-cyan-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    💧 Homeopathy Active
+                  </span>
+                )}
+                {isAyurveda && !isHomeopathy && (
                   <span className="bg-emerald-900/80 border border-emerald-400 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    🌿 AYUSH Active
+                    🌿 Ayurveda Active
                   </span>
                 )}
                 {isVitalsTurn && (

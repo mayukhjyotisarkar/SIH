@@ -701,16 +701,33 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
             </div>
           )}
 
-          {/* AYUSH Details if available */}
+          {/* AYUSH Ayurveda Details if available */}
           {session.historyOfPresentIllness?.ayushDetails && (
             <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1 mt-2">
-              <strong className="text-amber-900 font-bold">AYUSH Dashavidha Pariksha Findings:</strong>
+              <strong className="text-amber-900 font-bold">🌿 AYUSH Ayurveda Dashavidha Pariksha Findings:</strong>
               {Object.entries(session.historyOfPresentIllness.ayushDetails).map(([k, v]) => (
                 <div key={k}>
                   <span className="capitalize font-semibold text-amber-800">{k.replace(/_/g, ' ')}: </span>
                   <span className="text-slate-900">{v}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* AYUSH Homeopathy Details if available */}
+          {session.historyOfPresentIllness?.homeopathicDetails && (
+            <div className="p-3.5 bg-cyan-50 rounded-xl border border-cyan-200 text-xs space-y-1 mt-2">
+              <strong className="text-cyan-950 font-bold flex items-center gap-1">
+                <span>💧 AYUSH Homeopathy Totality &amp; Modalities Findings:</span>
+              </strong>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {Object.entries(session.historyOfPresentIllness.homeopathicDetails).map(([k, v]) => (
+                  <div key={k} className="bg-white/80 p-2 rounded-lg border border-cyan-100">
+                    <span className="capitalize font-bold text-cyan-900 block">{k.replace(/([A-Z])/g, ' $1')}: </span>
+                    <span className="text-slate-800 font-medium">{v}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1191,6 +1208,11 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
                             <td className="py-2.5 px-3 font-bold text-slate-900">
                               <div className="space-y-0.5">
                                 <span>{drug.name}</span>
+                                {drug.potency && (
+                                  <span className="ml-1.5 px-2 py-0.5 rounded bg-cyan-100 border border-cyan-300 text-cyan-900 text-[10px] font-bold">
+                                    💧 Potency: {drug.potency}
+                                  </span>
+                                )}
                                 {drug.contraindicationWarning && (
                                   <div className="flex items-center space-x-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
                                     <ShieldAlert className="w-3 h-3 text-rose-600" />

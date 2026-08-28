@@ -141,7 +141,9 @@ async def submit_answer(session_id: str, req: PatientAnswerRequest):
     adaptive_resp = await llm_service.get_next_question(
         chief_complaint=session.chiefComplaint,
         conversation_turns=session.conversationTurns,
-        ayush_mode=session.ayushMode or req.ayushMode,
+        ayush_mode=session.ayushMode or req.ayushMode or (session.medicalSystem == "ayurveda"),
+        homeopathy_mode=session.homeopathyMode or req.homeopathyMode or (session.medicalSystem == "homeopathy"),
+        medical_system=req.medicalSystem or session.medicalSystem or "allopathy",
         language=session.language,
         red_flag_active=red_flag.triggered
     )
@@ -150,7 +152,9 @@ async def submit_answer(session_id: str, req: PatientAnswerRequest):
     structured = llm_service.structure_history_summary(
         session.chiefComplaint,
         session.conversationTurns,
-        session.ayushMode
+        ayush_mode=session.ayushMode or req.ayushMode or (session.medicalSystem == "ayurveda"),
+        homeopathy_mode=session.homeopathyMode or req.homeopathyMode or (session.medicalSystem == "homeopathy"),
+        medical_system=req.medicalSystem or session.medicalSystem or "allopathy"
     )
     session.historyOfPresentIllness = structured["historyOfPresentIllness"]
     session.pastMedicalHistory = structured["pastMedicalHistory"]
@@ -168,8 +172,10 @@ async def submit_answer(session_id: str, req: PatientAnswerRequest):
             chief_complaint=session.chiefComplaint,
             conversation_turns=session.conversationTurns,
             age=session.age,
-            ayush_mode=session.ayushMode or req.ayushMode,
-            red_flag_active=session.redFlag.triggered
+            red_flag_triggered=session.redFlag.triggered,
+            ayush_mode=session.ayushMode or req.ayushMode or (session.medicalSystem == "ayurveda"),
+            homeopathy_mode=session.homeopathyMode or req.homeopathyMode or (session.medicalSystem == "homeopathy"),
+            medical_system=req.medicalSystem or session.medicalSystem or "allopathy"
         )
         session.departmentRouting = routing
 
@@ -442,10 +448,11 @@ async def correct_document_extraction(session_id: str, req: DocumentManualCorrec
 
 @app.get("/api/sample-docs/{sample_id}/image")
 async def get_sample_document_image(sample_id: str):
-    """Serves generated sample document PNG images."""
+    """Serves generated sample document PNG preview images."""
     if sample_id not in ocr_service.SAMPLE_DOCS_METADATA:
         raise HTTPException(status_code=404, detail="Sample image not found")
-    filename = ocr_service.SAMPLE_DOCS_METADATA[sample_id]["filename"]
+    meta = ocr_service.SAMPLE_DOCS_METADATA[sample_id]
+    filename = meta.get("preview_filename", meta["filename"])
     img_path = os.path.join(SAMPLE_DOCS_DIR, filename)
     if not os.path.exists(img_path):
         ocr_service.ensure_sample_images_exist()
@@ -453,13 +460,34 @@ async def get_sample_document_image(sample_id: str):
 
 @app.get("/api/documents/{doc_id}/image")
 async def get_uploaded_document_image(doc_id: str):
-    """Serves real uploaded document image files."""
+    """Serves real uploaded document image preview or converted PDF thumbnail."""
+    # First look for rendered PNG thumbnail
+    png_path = os.path.join(UPLOADS_DIR, f"{doc_id}.png")
+    if os.path.exists(png_path):
+        return FileResponse(png_path, media_type="image/png")
+
     for filename in os.listdir(UPLOADS_DIR):
         if filename.startswith(doc_id):
             img_path = os.path.join(UPLOADS_DIR, filename)
-            media_type = "image/jpeg" if filename.lower().endswith((".jpg", ".jpeg")) else "image/png"
-            return FileResponse(img_path, media_type=media_type)
+            if filename.lower().endswith((".jpg", ".jpeg")):
+                return FileResponse(img_path, media_type="image/jpeg")
+            elif filename.lower().endswith(".png"):
+                return FileResponse(img_path, media_type="image/png")
+            elif filename.lower().endswith(".pdf"):
+                return FileResponse(img_path, media_type="application/pdf")
+            else:
+                return FileResponse(img_path, media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="Uploaded document image not found")
+
+@app.get("/api/documents/{doc_id}/raw")
+async def get_uploaded_document_raw(doc_id: str):
+    """Serves raw original uploaded file (including original PDF)."""
+    for filename in os.listdir(UPLOADS_DIR):
+        if filename.startswith(doc_id):
+            file_path = os.path.join(UPLOADS_DIR, filename)
+            media_type = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
+            return FileResponse(file_path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="Uploaded file not found")
 
 # --- SUMMARY & CONFIRMATION ---
 
@@ -794,6 +822,7 @@ async def review_clinical_note(session_id: str, req: PhysicianSectionReviewReque
     return {"status": "reviewed", "session": session}
 
 @app.post("/api/physician/session/{session_id}/clinical-decision-support", response_model=CDSSResponse)
+@app.post("/api/physician/session/{session_id}/cdss", response_model=CDSSResponse)
 async def get_clinical_decision_support(session_id: str):
     """
     Generates evidence-based treatment options, differential diagnoses, critical points to notice,

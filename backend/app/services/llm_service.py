@@ -37,6 +37,22 @@ RULES:
 - Output STRICT JSON ONLY.
 """
 
+    SYSTEM_PROMPT_HOMEOPATHY = """
+You are the AYUSH / Homeopathic OPD Triage Nurse AI engine for 'MediKiosk'.
+Conduct a comprehensive Homeopathic pre-consultation intake based on classical Homeopathic principles (Dr. Hahnemann's Organon of Medicine):
+1. Chief Complaint & Baseline Vitals (Height, Weight, BP)
+2. Thermal State: Chilly patient (sensitive to cold, draft, wraps up) vs Hot patient (sensitive to heat, seeks cool air/fans).
+3. Thirst & Appetite: Thirstlessness vs Extreme Thirst (large vs small quantities), food cravings/aversions (sweets, spicy, salt, sour, fats).
+4. Modalities (Aggravation < and Amelioration >): Factors that worsen or relieve the trouble (time e.g. morning/night/3 AM, motion, rest, cold air, warm drinks, pressure, weather).
+5. Mind & Emotional Generals: Restlessness, anxiety about health, irritability/anger, weepiness/mildness seeking consolation, fear.
+6. Physical Generals & Side Affinity: Right-sided vs Left-sided, perspiration pattern (head, palms, night), sleep position.
+7. Past History & Suppressions: Past skin eruptions, chronic suppression of discharges, family history.
+8. Current Homeopathic or Allopathic Medicines & Drug Allergies.
+
+Ask exactly ONE clear question at a time with 3-4 options. Set `"done": true` once 7-8 comprehensive turns are gathered.
+Output STRICT JSON ONLY.
+"""
+
     SYSTEM_PROMPT_AYUSH = """
 You are the AYUSH / Ayurvedic OPD Triage Nurse AI engine for 'MediKiosk'.
 Conduct a comprehensive Ayurvedic intake using 'Dashavidha Pariksha' (Ten-fold Examination), Dosha assessment, Agni, Kostha, Ahara-Vihara and Manasika status.
@@ -116,6 +132,8 @@ SAFETY RULES:
         chief_complaint: str,
         conversation_turns: List[QAPair],
         ayush_mode: bool = False,
+        homeopathy_mode: bool = False,
+        medical_system: str = "allopathy",
         language: str = "en",
         red_flag_active: bool = False
     ) -> AdaptiveQuestionResponse:
@@ -158,7 +176,12 @@ SAFETY RULES:
         progress_estimate = min(15 + (turn_count * 12), 95)
         user_prompt = f"{conv_text}\nGenerate the next sequential nurse intake question (Turn {turn_count + 1} of 8) in JSON format. Progress: {progress_estimate}%."
         
-        system_prompt = cls.SYSTEM_PROMPT_AYUSH if ayush_mode else cls.SYSTEM_PROMPT_ALLOPATHIC
+        if homeopathy_mode or medical_system == "homeopathy":
+            system_prompt = cls.SYSTEM_PROMPT_HOMEOPATHY
+        elif ayush_mode or medical_system == "ayurveda":
+            system_prompt = cls.SYSTEM_PROMPT_AYUSH
+        else:
+            system_prompt = cls.SYSTEM_PROMPT_ALLOPATHIC
 
         # Try Live LLM call if provider configured
         llm_response = await cls._call_llm_provider(system_prompt, user_prompt)
@@ -185,7 +208,7 @@ SAFETY RULES:
                 print(f"[LLMService] JSON parse error: {parse_err}")
 
         # Comprehensive Symptom-Specific Sequential Engine
-        return cls._symptom_specific_fallback(chief_complaint, conversation_turns, ayush_mode, turn_count, symptom_category, red_flag_active)
+        return cls._symptom_specific_fallback(chief_complaint, conversation_turns, ayush_mode, homeopathy_mode, medical_system, turn_count, symptom_category, red_flag_active)
 
     @classmethod
     def _symptom_specific_fallback(
@@ -193,6 +216,8 @@ SAFETY RULES:
         chief_complaint: str,
         conversation_turns: List[QAPair],
         ayush_mode: bool,
+        homeopathy_mode: bool,
+        medical_system: str,
         turn_count: int,
         category: str,
         red_flag_active: bool = False
@@ -203,7 +228,20 @@ SAFETY RULES:
         """
         answered_fields = {t.field for t in conversation_turns}
 
-        if ayush_mode:
+        if homeopathy_mode or medical_system == "homeopathy":
+            flow = [
+                ("vitals_baseline_common", "What are your approximate Height (cm), Weight (kg), and Blood Pressure (BP)? (Standard Baseline Vitals for OPD Care)", ["Height: 168 cm, Weight: 65 kg, BP: 120/80 mmHg (Normal)", "Height: 160 cm, Weight: 75 kg, BP: 140/90 mmHg (High BP)", "Height: 172 cm, Weight: 55 kg, BP: 110/70 mmHg (Low/Normal BP)", "Prefer not to disclose / Skip this data"]),
+                ("thermal_state", "How do you react to weather and temperatures (Thermal State)?", ["Chilly patient (Dislike cold air/drafts, need warm blankets)", "Hot patient (Dislike heat/stuffy rooms, want fan/cool air)", "Ambithermal / Tolerates both cold and heat equally", "Sensitive to sudden weather changes / Damp weather"]),
+                ("thirst_appetite", "How is your thirst for water and appetite pattern?", ["Thirsty for large quantities at long intervals (Bryonia)", "Thirsty for small sips frequently (Arsenicum)", "Thirstless even with fever/dryness (Pulsatilla/Apis)", "Normal thirst (2-3 liters daily) with regular appetite"]),
+                ("homeopathic_modalities", "What makes your trouble worse (< Aggravation) or better (> Amelioration)?", ["Worse from cold air/drafts, better from warm drinks/wraps", "Worse from slightest motion/movement, better by absolute rest", "Worse at night or early morning (2-4 AM), better by warm applications", "Worse in stuffy warm rooms, better in fresh open air"]),
+                ("mind_emotional_generals", "How would you describe your mental and emotional temperament?", ["Restless, anxious, fear of disease (Arsenicum / Aconite)", "Irritable, impatient, fastidious, angry easily (Nux Vomica)", "Mild, gentle, weeps easily, likes consolation (Pulsatilla)", "Calm, cheerful, emotionally balanced"]),
+                ("food_cravings_aversions", "Do you have strong cravings or aversions for specific foods?", ["Craving sweets, sugar, or warm food", "Craving spicy, pungent, or salty food", "Aversion to fatty/oily food or milk", "Normal balanced diet without strong cravings"]),
+                ("side_affinity_perspiration", "Is your complaint more on one side, and how is your perspiration?", ["Right-sided complaint (Lycopodium / Belladonna)", "Left-sided complaint (Lachesis / Spigelia)", "Profuse sweating on head / palms / night", "Normal sweating, both sides affected equally"]),
+                ("medications_homeopathy", "Are you currently taking any Homeopathic remedies or regular Allopathic medicines?", ["Taking Homeopathic drops/globules currently", "Taking regular Allopathic medicines for BP/Sugar", "Both Homeopathic and Allopathic", "No medications currently"])
+            ]
+            flow_category = "AYUSH_Homeopathy"
+
+        elif ayush_mode or medical_system == "ayurveda":
             flow = [
                 ("prakriti_assessment", "How would you describe your overall body type and tolerance to weather?", ["Lean / Dry skin / Dislikes cold (Vata)", "Medium build / Prone to heat / Sweats easily (Pitta)", "Heavy / Sturdy / Calm / Dislikes damp cold (Kapha)", "Mixed Prakriti"]),
                 ("agni_digestion", "How is your appetite, digestion speed, and hunger regularity?", ["Irregular & variable hunger (Vishamagni)", "Intense burning hunger & thirst (Tikshnagni)", "Sluggish / Heavy after meals (Mandagni)", "Smooth & balanced (Samagni)"]),
@@ -444,7 +482,9 @@ SAFETY RULES:
         cls,
         chief_complaint: str,
         conversation_turns: List[QAPair],
-        ayush_mode: bool = False
+        ayush_mode: bool = False,
+        homeopathy_mode: bool = False,
+        medical_system: str = "allopathy"
     ) -> Dict[str, Any]:
         """
         Structures collected conversation Q&A pairs into a rich, nurse-grade clinical intake report.
@@ -459,6 +499,7 @@ SAFETY RULES:
         vitals = PatientVitals()
         ros_items = []
         ayush_details = {}
+        homeopathic_details = {}
         pertinent_positives = []
         pertinent_negatives = []
         red_flags_checked = []
@@ -525,6 +566,24 @@ SAFETY RULES:
                 ayush_details["kostha"] = ans
             elif "nidra" in f:
                 ayush_details["nidra"] = ans
+            elif "thermal" in f:
+                homeopathic_details["thermalState"] = ans
+                pertinent_positives.append(f"Thermal State: {ans}")
+            elif "thirst" in f:
+                homeopathic_details["thirst"] = ans
+                pertinent_positives.append(f"Thirst Pattern: {ans}")
+            elif "modalit" in f:
+                homeopathic_details["modalitiesAggravation"] = ans
+                pertinent_positives.append(f"Homeopathic Modalities: {ans}")
+            elif "mind" in f or "emotional" in f:
+                homeopathic_details["mindGenerals"] = ans
+                pertinent_positives.append(f"Mind Generals: {ans}")
+            elif "cravings" in f or "aversions" in f or "food" in f:
+                homeopathic_details["physicalGenerals"] = ans
+                pertinent_positives.append(f"Food Cravings: {ans}")
+            elif "side_affinity" in f or "perspiration" in f:
+                homeopathic_details["sideAffinity"] = ans
+                pertinent_positives.append(f"Physical Generals: {ans}")
             elif "vitals" in f or "weight" in f or "height" in f or "blood_pressure" in f or "bp" in f:
                 if any(w in ans_lower for w in ["prefer not", "skip", "decline", "withheld"]):
                     vitals.disclosureStatus = "declined"
@@ -541,6 +600,8 @@ SAFETY RULES:
 
         if ayush_details:
             hpi.ayushDetails = ayush_details
+        if homeopathic_details:
+            hpi.homeopathicDetails = homeopathic_details
         hpi.clinicalRedFlagsChecked = red_flags_checked
 
         if not hpi.onset:
@@ -634,7 +695,9 @@ SAFETY RULES:
         red_flag = session_data.get("redFlag", {})
         red_flag_text = red_flag.get("reason", "None") if isinstance(red_flag, dict) and red_flag.get("triggered") else "None"
         category = cls.identify_symptom_category(chief)
-        is_ayush = bool(session_data.get("ayushMode", False))
+        is_ayush = bool(session_data.get("ayushMode", False)) or session_data.get("medicalSystem") == "ayurveda"
+        is_homeopathy = bool(session_data.get("homeopathyMode", False)) or session_data.get("medicalSystem") == "homeopathy"
+        
 
         user_prompt = f"""
 PATIENT PRE-CONSULTATION CLINICAL PROFILE:
@@ -691,13 +754,14 @@ Generate comprehensive evidence-based Differential Diagnoses, practical Indian O
                 print(f"[LLMService] CDSS JSON parse error: {parse_err}")
 
         # Fallback Guideline Engine
-        return cls._guideline_cdss_fallback(category, is_ayush, allergies, past_text, chief, hpi_text)
+        return cls._guideline_cdss_fallback(category, is_ayush, is_homeopathy, allergies, past_text, chief, hpi_text)
 
     @classmethod
     def _guideline_cdss_fallback(
         cls,
         category: str,
         is_ayush: bool,
+        is_homeopathy: bool,
         allergies: str,
         past_text: str,
         chief: str,
@@ -709,6 +773,31 @@ Generate comprehensive evidence-based Differential Diagnoses, practical Indian O
         and recommended diagnostic workup across specialties.
         """
         has_penicillin_allergy = "penicillin" in allergies.lower() or "amox" in allergies.lower()
+
+        if is_homeopathy:
+            return CDSSResponse(
+                differentialDiagnoses=[
+                    DifferentialDiagnosis(condition="Constitutional / Acute Homeopathic Case Totality", icd10="U70.0", probability="High", rationale="Totality of thermal reaction, thirst characteristics, mental disposition, and symptom modalities indicate high similimum correspondence."),
+                    DifferentialDiagnosis(condition="Psoric / Sycotic Chronic Diathesis", icd10="U70.1", probability="Moderate", rationale="Underlying susceptibility with recurrent functional disturbances exacerbated by environmental modalities."),
+                    DifferentialDiagnosis(condition="Secondary Functional Pathological Disturbance", icd10="R69", probability="Consider / Low", rationale="Somatic functional expression corresponding to selected keynotes.")
+                ],
+                suggestedTreatments=[
+                    SuggestedDrug(name="Arsenicum Album", dosage="4 globules / 2 drops in water", frequency="Twice daily before food", duration="5 days", potency="30C", repetition="TDS in acute phase", rationale="Indicated for intense restlessness, burning sensation relieved by warmth, and frequent thirst for small sips"),
+                    SuggestedDrug(name="Nux Vomica", dosage="4 globules", frequency="Once daily at bedtime", duration="7 days", potency="30C", repetition="Night dose", rationale="Keynote remedy for sedentary stress, digestive irritability, and oversensitivity from rich spicy foods"),
+                    SuggestedDrug(name="Bryonia Alba", dosage="4 globules", frequency="Twice daily after food", duration="5 days", potency="200C", repetition="Twice daily", rationale="Indicated when symptoms are sharply aggravated by the slightest motion and relieved by absolute rest and firm pressure")
+                ],
+                keyPointsToNotice=[
+                    "Assess mental disposition: Restless anxiety (Arsenicum) vs irritable fastidious (Nux Vomica) vs mild/weepy (Pulsatilla)",
+                    "Verify exact modalities: Time of aggravation (< morning, < night 2-3 AM), temperature (< cold air, < stuffy room)",
+                    "Check food desires/aversions: Craving sweets/warm food vs fatty food intolerance"
+                ],
+                recommendedInvestigations=[
+                    "Comprehensive Homeopathic Repertorization & Miasmatic Assessment",
+                    "Routine Baseline Vitals & OPD Clinical Examination"
+                ],
+                clinicalRationale="Patient exhibits characteristic Homeopathic keynote totality; individual Similimum selected based on modalities, thermals, and mental generals for gentle, rapid restoration of health.",
+                source="guideline_rules"
+            )
 
         if is_ayush:
             return CDSSResponse(

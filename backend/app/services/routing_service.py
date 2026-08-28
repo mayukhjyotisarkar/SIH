@@ -98,6 +98,14 @@ class DepartmentRoutingService:
             "floorLocation": "Ground Floor (AYUSH Holistic Care Annex)",
             "defaultReason": "Dashavidha Pariksha, Prakriti-Dosha analysis and holistic lifestyle prescription."
         },
+        "AYUSH_Homeopathy": {
+            "departmentCode": "HOMEO",
+            "doctorName": "Dr. S. K. Roy",
+            "doctorTitle": "Homeopathic Physician (BHMS, MD Hom)",
+            "roomNumber": "HOMEO-01",
+            "floorLocation": "Ground Floor (AYUSH & Homeopathy Annex)",
+            "defaultReason": "Totality of symptoms, thermal/thirst constitution evaluation and Similimum repertorization."
+        },
         "General_Medicine": {
             "departmentCode": "GEN_MED",
             "doctorName": "Dr. Subhash Chandra",
@@ -140,16 +148,18 @@ class DepartmentRoutingService:
             r"\b(sugar|diabetes|diabetic|thirst|pyas|peshab|frequent\s*urination|polyuria|weight\s*loss|thyroid|hypothyroid|goitre|fatigue|hba1c|endocrine)\b"
         ]),
         ("Dermatology", [
-            r"\b(skin|rash|rashes|itch|itching|khujli|pimple|pimples|acne|eczema|fungal|infection\s*on\s*skin|daag|ringworm|psoriasis|hives|scabies|dermat)\b"
+            r"\b(skin|rash|rashes|itch|itching|khujli|pimple|pimples|acne|eczema|fungal|ringworm|daag|boil|boils|psoriasis|allergy|urticaria|derma|scabies)\b"
         ]),
         ("ENT", [
-            r"\b(ear|ears|kaan|hearing|throat|gala|sore\s*throat|nose|naak|sinus|sinusitis|tonsil|tonsillitis|hoarseness|ear\s*discharge|tinnitus)\b"
+            r"\b(ear|ears|kaan|hearing|throat|sore\s*throat|gala|tonsil|tonsils|nose|naak|sinus|sinusitis|cold|rhinitis|hoarseness|voice|ear\s*pain|ear\s*discharge)\b"
         ])
     ]
 
-    # Non-specific / ambiguous phrases that indicate patient needs staff nurse guidance
+    # Vague / non-specific complaints requiring dedicated nurse triage
     AMBIGUOUS_PATTERNS = [
-        r"\b(not\s*feeling\s*well|overall\s*unwell|body\s*hurting\s*everywhere|sub\s*kuch\s*dard|kuch\s*samajh\s*nahi\s*aaraha|don'?t\s*know|just\s*checkup|general\s*checkup|unclear|multiple\s*problems|sar\s*se\s*paon\s*tak\s*dard|weak\s*all\s*over)\b"
+        r"\b(not\s*feeling\s*well|overall\s*unwell|body\s*hurting\s*everywhere|sub\s*kuch\s*dard|kuch\s*samajh\s*nahi\s*aaraha|don'?t\s*know|just\s*checkup|general\s*checkup|unclear|multiple\s*problems|sar\s*se\s*paon\s*tak\s*dard|weak\s*all\s*over)\b",
+        r"^(general|checkup|regular|normal|feeling\s*unwell|weakness|body\s*pain|tabiyat\s*kharab|kamzori|dard|pain|help|not\s*well|asustho)$",
+        r"^(sirf\s*checkup|doctor\s*dikhao|kuch\s*theek\s*nahi\s*hai|shorir\s*kharap)$"
     ]
 
     @classmethod
@@ -157,16 +167,24 @@ class DepartmentRoutingService:
         cls,
         chief_complaint: str,
         conversation_turns: List[QAPair],
-        age: int = 30,
+        red_flag_triggered: bool = False,
         ayush_mode: bool = False,
-        red_flag_active: bool = False
+        homeopathy_mode: bool = False,
+        medical_system: str = "allopathy",
+        age: int = 30
     ) -> DepartmentRouting:
         """
-        Computes the most appropriate hospital department and specialist doctor.
-        Flagged as ambiguous if the condition cannot be confidently assigned to a single specialist.
+        Determines the optimal specialist OPD department and doctor.
+        Priority:
+        1. Emergency / Red Flag -> Emergency Trauma Bay
+        2. AYUSH Homeopathy -> Homeopathy OPD Block
+        3. AYUSH Ayurveda -> Ayurvedic OPD Block
+        4. Pediatrics -> Children OPD (if age < 12)
+        5. Specific Specialty -> Cardiology / Ortho / Gastro / Pulmo / Neuro / Eye / ENT / Derma
+        6. Vague / Multi-system -> General Medicine with Staff Triage Alert
         """
-        # 1. Immediate Emergency Red Flag Priority
-        if red_flag_active:
+        # 1. Emergency Red Flag Triggered
+        if red_flag_triggered:
             meta = cls.DEPARTMENT_DIRECTORY["Emergency"]
             return DepartmentRouting(
                 department="Emergency Casualty",
@@ -181,8 +199,24 @@ class DepartmentRoutingService:
                 confidence=1.0
             )
 
-        # 2. AYUSH Ayurveda Mode Active
-        if ayush_mode:
+        # 2. AYUSH Homeopathy Mode Active
+        if homeopathy_mode or medical_system == "homeopathy":
+            meta = cls.DEPARTMENT_DIRECTORY["AYUSH_Homeopathy"]
+            return DepartmentRouting(
+                department="AYUSH Homeopathy",
+                departmentCode=meta["departmentCode"],
+                doctorName=meta["doctorName"],
+                doctorTitle=meta["doctorTitle"],
+                roomNumber=meta["roomNumber"],
+                floorLocation=meta["floorLocation"],
+                isAmbiguous=False,
+                assignedBy="ai-triage",
+                routingReason=meta["defaultReason"],
+                confidence=0.98
+            )
+
+        # 3. AYUSH Ayurveda Mode Active
+        if ayush_mode or medical_system == "ayurveda":
             meta = cls.DEPARTMENT_DIRECTORY["AYUSH_Ayurveda"]
             return DepartmentRouting(
                 department="AYUSH Ayurveda",

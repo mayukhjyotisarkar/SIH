@@ -117,57 +117,57 @@ def test_symptom_specific_questioning_specialties_sequential_progression():
     assert ans0.status_code == 200
     q1_data = ans0.json()["adaptive"]
     assert q1_data["symptomCategory"] == "Gastrointestinal"
-    assert q1_data["field"] == "gi_site_character"
+    assert q1_data["field"] == "vitals_baseline_common"
 
-    # Turn 1: Site / Character answered
+    # Turn 1: Mandatory Baseline Vitals answered
     ans1 = client.post(f"/api/session/{s_gi}/answer", json={
-        "answer": "Upper center (Epigastrium) - Burning pain",
+        "answer": "Height: 165 cm, Weight: 60 kg, Blood Pressure: 120/80 mmHg",
         "field": q1_data["field"],
         "questionText": q1_data["question"]
     })
     q2_data = ans1.json()["adaptive"]
-    assert q2_data["field"] == "onset_progression"
+    assert q2_data["field"] == "gi_site_character"
     assert q2_data["field"] != q1_data["field"]
 
-    # Turn 2: Duration answered
+    # Turn 2: Site / Character answered
     ans2 = client.post(f"/api/session/{s_gi}/answer", json={
-        "answer": "Started 1 to 2 days ago (Acute)",
+        "answer": "Upper center (Epigastrium) - Burning pain",
         "field": q2_data["field"],
         "questionText": q2_data["question"]
     })
     q3_data = ans2.json()["adaptive"]
-    assert q3_data["field"] == "meals_relationship"
+    assert q3_data["field"] == "onset_progression"
     assert q3_data["field"] != q2_data["field"]
 
-    # Turn 3: Meals relationship answered
+    # Turn 3: Duration answered
     ans3 = client.post(f"/api/session/{s_gi}/answer", json={
-        "answer": "Worse on empty stomach / Relieved by milk",
+        "answer": "Started 1 to 2 days ago (Acute)",
         "field": q3_data["field"],
         "questionText": q3_data["question"]
     })
     q4_data = ans3.json()["adaptive"]
-    assert q4_data["field"] == "gi_associated_nausea"
+    assert q4_data["field"] == "meals_relationship"
     assert q4_data["field"] != q3_data["field"]
 
-    # Turn 4: Nausea answered
+    # Turn 4: Meals relationship answered
     ans4 = client.post(f"/api/session/{s_gi}/answer", json={
-        "answer": "Frequent sour belching & acid reflux",
+        "answer": "Worse on empty stomach / Relieved by milk",
         "field": q4_data["field"],
         "questionText": q4_data["question"]
     })
     q5_data = ans4.json()["adaptive"]
-    assert q5_data["field"] == "red_flags_gi"
+    assert q5_data["field"] == "gi_associated_nausea"
 
-    # Turn 5: Red flags answered with negative statement -> redFlag MUST be False
+    # Turn 5: Nausea answered
     ans5 = client.post(f"/api/session/{s_gi}/answer", json={
-        "answer": "No blood in vomit, normal stools",
+        "answer": "Frequent sour belching & acid reflux",
         "field": q5_data["field"],
         "questionText": q5_data["question"]
     })
     res5_body = ans5.json()
     assert res5_body["redFlag"]["triggered"] is False
     q6_data = res5_body["adaptive"]
-    assert q6_data["field"] == "past_gi_history"
+    assert q6_data["field"] == "red_flags_gi"
 
     # 2. Test Respiratory Complaint Specialization
     resp_resp = client.post("/api/session/start", json={"fullName": "Amit Roy", "age": 45, "gender": "Male"})
@@ -176,7 +176,7 @@ def test_symptom_specific_questioning_specialties_sequential_progression():
     assert ans_resp.status_code == 200
     data_resp = ans_resp.json()
     assert data_resp["adaptive"]["symptomCategory"] == "Respiratory"
-    assert data_resp["adaptive"]["field"] == "cough_nature"
+    assert data_resp["adaptive"]["field"] == "vitals_baseline_common"
 
     # 3. Test Musculoskeletal Complaint Specialization
     resp_msk = client.post("/api/session/start", json={"fullName": "Meenakshi Devi", "age": 60, "gender": "Female"})
@@ -185,7 +185,7 @@ def test_symptom_specific_questioning_specialties_sequential_progression():
     assert ans_msk.status_code == 200
     data_msk = ans_msk.json()
     assert data_msk["adaptive"]["symptomCategory"] == "Musculoskeletal"
-    assert data_msk["adaptive"]["field"] == "joint_location_pattern"
+    assert data_msk["adaptive"]["field"] == "vitals_baseline_common"
 
 def test_multilingual_audio_transcription_and_colloquialisms():
     resp = client.post("/api/session/start", json={"fullName": "Rajesh Kumar", "age": 50, "gender": "Male"})
@@ -533,6 +533,76 @@ def test_multilingual_text_to_speech_endpoint():
     assert resp_hi.status_code == 200
     assert resp_hi.headers.get("content-type") == "audio/mpeg"
     assert len(resp_hi.content) > 500
+
+def test_homeopathy_system_intake_routing_and_cdss():
+    # 1. Start Homeopathy Patient Session
+    resp = client.post("/api/session/start", json={
+        "fullName": "Ananya Mukherjee",
+        "age": 38,
+        "gender": "Female",
+        "medicalSystem": "homeopathy",
+        "homeopathyMode": True
+    })
+    assert resp.status_code == 200
+    sess = resp.json()
+    s_id = sess["sessionId"]
+    assert sess["medicalSystem"] == "homeopathy"
+    assert sess["homeopathyMode"] is True
+
+    # Turn 0: Chief Complaint
+    ans0 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Chronic recurring gastric acidity, burning in stomach, and morning nausea",
+        "field": "chief_complaint",
+        "medicalSystem": "homeopathy"
+    })
+    assert ans0.status_code == 200
+    q1 = ans0.json()["adaptive"]
+    assert q1["field"] == "vitals_baseline_common"
+
+    # Turn 1: Vitals
+    ans1 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Height: 162 cm, Weight: 58 kg, BP: 118/76 mmHg",
+        "field": q1["field"],
+        "questionText": q1["question"],
+        "medicalSystem": "homeopathy"
+    })
+    q2 = ans1.json()["adaptive"]
+    assert q2["field"] == "thermal_state"
+
+    # Turn 2: Thermal State answered (Chilly)
+    ans2 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Chilly patient (Dislike cold air/drafts, need warm blankets)",
+        "field": q2["field"],
+        "questionText": q2["question"],
+        "medicalSystem": "homeopathy"
+    })
+    q3 = ans2.json()["adaptive"]
+    assert q3["field"] == "thirst_appetite"
+
+    # Turn 3: Thirst answered
+    ans3 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Thirsty for small sips frequently (Arsenicum)",
+        "field": q3["field"],
+        "questionText": q3["question"],
+        "medicalSystem": "homeopathy"
+    })
+    q4 = ans3.json()["adaptive"]
+    assert q4["field"] == "homeopathic_modalities"
+
+    # Verify Department Routing to AYUSH Homeopathy OPD
+    sess_data = ans3.json()["session"]
+    assert sess_data["departmentRouting"]["department"] == "AYUSH Homeopathy"
+    assert sess_data["departmentRouting"]["departmentCode"] == "HOMEO"
+    assert "Dr. S. K. Roy" in sess_data["departmentRouting"]["doctorName"]
+
+    # Verify Homeopathic CDSS Recommendations & Potency
+    cdss_resp = client.post(f"/api/physician/session/{s_id}/cdss")
+    assert cdss_resp.status_code == 200
+    cdss = cdss_resp.json()
+    assert len(cdss["differentialDiagnoses"]) > 0
+    assert len(cdss["suggestedTreatments"]) > 0
+    assert any(d.get("potency") in ["30C", "200C", "1M"] for d in cdss["suggestedTreatments"])
+
 
 
 

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   AlertTriangle, Flame, ShieldAlert, HeartPulse, Activity, 
   Stethoscope, Bed, Siren, RefreshCw, CheckCircle2, 
-  ArrowRight, Clock, User, PhoneCall, Zap, FileText
+  ArrowRight, Clock, User, PhoneCall, Zap, FileText,
+  Search, X, Filter
 } from 'lucide-react';
 import { PatientSession } from '../../types';
 import { ApiService } from '../../services/api';
@@ -26,6 +27,11 @@ export const EmergencyDashboard: React.FC = () => {
   const [actionInProgress, setActionInProgress] = useState<Record<string, boolean>>({});
   const [selectedBeds, setSelectedBeds] = useState<Record<string, string>>({});
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'emergency' | 'urgent'>('all');
+  const [bedStatusFilter, setBedStatusFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
 
   const fetchEmergencyQueue = async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
@@ -75,7 +81,40 @@ export const EmergencyDashboard: React.FC = () => {
     }
   };
 
+  // Filtered Queue based on Search and Filter Pills
+  const filteredQueue = useMemo(() => {
+    return emergencyQueue.filter((patient) => {
+      // 1. Urgency filter
+      if (urgencyFilter !== 'all' && patient.redFlag?.urgency !== urgencyFilter) {
+        return false;
+      }
+
+      // 2. Bed Status filter
+      if (bedStatusFilter === 'assigned' && !patient.assignedBed) {
+        return false;
+      }
+      if (bedStatusFilter === 'unassigned' && patient.assignedBed) {
+        return false;
+      }
+
+      // 3. Search query matching
+      if (!searchQuery.trim()) return true;
+
+      const q = searchQuery.toLowerCase().trim();
+      const nameMatch = (patient.patientName || '').toLowerCase().includes(q);
+      const tokenMatch = (patient.tokenNumber || '').toLowerCase().includes(q);
+      const abhaMatch = (patient.patientId || '').toLowerCase().includes(q);
+      const reasonMatch = (patient.redFlag?.reason || '').toLowerCase().includes(q);
+      const ccMatch = (patient.chiefComplaint || '').toLowerCase().includes(q);
+      const bedMatch = (patient.assignedBed || '').toLowerCase().includes(q);
+
+      return nameMatch || tokenMatch || abhaMatch || reasonMatch || ccMatch || bedMatch;
+    });
+  }, [emergencyQueue, searchQuery, urgencyFilter, bedStatusFilter]);
+
   const activeRedFlagCount = emergencyQueue.length;
+  const emergencyCount = emergencyQueue.filter(p => p.redFlag?.urgency === 'emergency').length;
+  const urgentCount = emergencyQueue.filter(p => p.redFlag?.urgency === 'urgent').length;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 lg:px-8 space-y-8">
@@ -120,7 +159,7 @@ export const EmergencyDashboard: React.FC = () => {
             type="button"
             onClick={() => fetchEmergencyQueue(true)}
             disabled={isLoading}
-            className="px-3.5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-600/30 transition-all flex items-center space-x-1.5"
+            className="px-3.5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-600/30 transition-all flex items-center space-x-1.5 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh Queue</span>
@@ -128,7 +167,139 @@ export const EmergencyDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Priority Queue Stream */}
+      {/* 2. Emergency Search & Triage Filter Bar */}
+      <div className="max-w-6xl mx-auto bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row items-center gap-3">
+          
+          {/* Search Input Box with Action Button */}
+          <div className="relative flex-1 w-full flex items-center">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search emergency cases by Patient Name, Token, ABHA ID, Symptoms, or Bed..."
+                className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 focus:border-rose-500 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {}}
+              className="ml-2 px-4 py-2.5 bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold rounded-xl shadow-md flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search</span>
+            </button>
+          </div>
+
+          {/* Quick Filters */}
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            
+            {/* Filter: All / Emergency / Urgent */}
+            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setUrgencyFilter('all')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  urgencyFilter === 'all'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All ({activeRedFlagCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setUrgencyFilter('emergency')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  urgencyFilter === 'emergency'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-rose-400 hover:text-rose-300'
+                }`}
+              >
+                🚨 Critical ({emergencyCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setUrgencyFilter('urgent')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  urgencyFilter === 'urgent'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-amber-400 hover:text-amber-300'
+                }`}
+              >
+                ⚠️ Urgent ({urgentCount})
+              </button>
+            </div>
+
+            {/* Filter: Bed Allocation */}
+            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setBedStatusFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  bedStatusFilter === 'all' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All Beds
+              </button>
+              <button
+                type="button"
+                onClick={() => setBedStatusFilter('assigned')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  bedStatusFilter === 'assigned' ? 'bg-emerald-800 text-white font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Bed Assigned
+              </button>
+              <button
+                type="button"
+                onClick={() => setBedStatusFilter('unassigned')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  bedStatusFilter === 'unassigned' ? 'bg-amber-800 text-white font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Awaiting Bed
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Search Results Summary */}
+        {(searchQuery || urgencyFilter !== 'all' || bedStatusFilter !== 'all') && (
+          <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-800/80">
+            <span>
+              Showing <strong className="text-white font-bold">{filteredQueue.length}</strong> of {activeRedFlagCount} active emergency cases
+              {searchQuery && <span> matching "<span className="text-rose-400">{searchQuery}</span>"</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setUrgencyFilter('all');
+                setBedStatusFilter('all');
+              }}
+              className="text-xs text-rose-400 hover:text-rose-300 font-bold hover:underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Priority Queue Stream */}
       <div className="max-w-6xl mx-auto space-y-6">
         
         {isLoading && emergencyQueue.length === 0 ? (
@@ -160,12 +331,33 @@ export const EmergencyDashboard: React.FC = () => {
               </Link>
             </div>
           </div>
+        ) : filteredQueue.length === 0 ? (
+          /* No search results */
+          <div className="py-12 text-center bg-slate-900/40 rounded-3xl border border-slate-800 p-8 space-y-3 max-w-lg mx-auto">
+            <Search className="w-8 h-8 text-slate-500 mx-auto" />
+            <h3 className="text-sm font-bold text-white">No Matching Emergency Cases</h3>
+            <p className="text-xs text-slate-400">
+              No emergency cases match your search or active filters.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setUrgencyFilter('all');
+                setBedStatusFilter('all');
+              }}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-white font-bold rounded-xl border border-slate-700 transition-all cursor-pointer"
+            >
+              Clear Search & Filters
+            </button>
+          </div>
         ) : (
           /* Active Red-Flag Cards */
           <div className="space-y-5">
-            {emergencyQueue.map((patient) => {
+            {filteredQueue.map((patient) => {
               const isEmergencyAcuity = patient.redFlag?.urgency === 'emergency';
               const assignedBed = patient.assignedBed || selectedBeds[patient.sessionId] || "Trauma Bay 1";
+              const symptomCategory = patient.historyOfPresentIllness?.symptomCategory;
 
               return (
                 <div
@@ -184,179 +376,164 @@ export const EmergencyDashboard: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white px-2 py-0.5 rounded">
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white px-2.5 py-0.5 rounded">
                             {isEmergencyAcuity ? 'CODE EMERGENCY' : 'PRIORITY RED FLAG'}
                           </span>
                           <span className="text-xs text-rose-300 font-mono">
-                            Token: <strong className="text-white font-bold">{patient.tokenNumber}</strong>
-                          </span>
-                          <span className="text-slate-600">•</span>
-                          <span className="text-xs text-slate-400 font-mono">
-                            Visit: {patient.visitId}
+                            Detected at Kiosk #1
                           </span>
                         </div>
-                        <h2 className="text-lg sm:text-xl font-extrabold text-white">
-                          {patient.redFlag?.reason || "Acute Clinical Red Flag Triggered"}
-                        </h2>
-                        <p className="text-xs font-semibold text-rose-200">
-                          Recommended Action: {patient.redFlag?.action || "Immediate casualty evaluation & nurse response."}
+                        <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                          {patient.redFlag?.reason || "Acute Clinical Red Flag"}
+                        </h3>
+                        <p className="text-xs text-rose-200 font-semibold">
+                          Recommended Action: {patient.redFlag?.action || "Immediate casualty evaluation"}
                         </p>
                       </div>
                     </div>
 
-                    {/* Bed Badge if assigned */}
-                    <div className="flex items-center space-x-2">
-                      {patient.assignedBed ? (
-                        <div className="bg-emerald-950 border border-emerald-500 text-emerald-300 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-sm">
-                          <Bed className="w-4 h-4 text-emerald-400" />
-                          <span>Assigned: <strong>{patient.assignedBed}</strong></span>
-                        </div>
-                      ) : (
-                        <div className="bg-rose-950/80 border border-rose-600/70 text-rose-300 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 animate-pulse">
-                          <Bed className="w-4 h-4 text-rose-400" />
-                          <span>Bed Unassigned (Pending)</span>
-                        </div>
-                      )}
+                    {/* Patient Identifiers */}
+                    <div className="text-right space-y-1">
+                      <span className="px-3 py-1 bg-rose-950 border border-rose-600 text-rose-300 text-xs font-mono font-black rounded-xl">
+                        Token #{patient.tokenNumber}
+                      </span>
+                      <div className="text-[11px] text-slate-400 font-mono pt-1">
+                        ABHA: {patient.patientId}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Patient Clinical Profile Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  {/* Middle Grid: Demographics, Chief Complaint & Vitals */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                     
-                    {/* Demographics & Chief Complaint */}
-                    <div className="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient Information</span>
-                      <div className="space-y-0.5">
-                        <strong className="text-base text-white font-bold block">{patient.patientName}</strong>
-                        <span className="text-slate-400 font-medium">{patient.age} Yrs / {patient.gender}</span>
-                      </div>
-                      <div className="pt-1.5 border-t border-slate-800/80">
-                        <span className="text-[10px] text-slate-400 font-bold block">Chief Complaint:</span>
-                        <p className="text-slate-200 font-semibold mt-0.5 leading-snug">{patient.chiefComplaint}</p>
+                    {/* Patient Identity */}
+                    <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Patient Information
+                      </span>
+                      <div className="space-y-1">
+                        <div className="text-base font-extrabold text-white">
+                          {patient.patientName}
+                        </div>
+                        <div className="text-slate-300 font-medium">
+                          {patient.age} Yrs • {patient.gender} • {patient.language?.toUpperCase()}
+                        </div>
+                        <div className="text-[11px] text-teal-400 font-mono pt-0.5">
+                          ABHA ID: {patient.patientId}
+                        </div>
                       </div>
                     </div>
 
-                    {/* HPI & Comorbidities */}
-                    <div className="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Clinical Presentation & HPI</span>
-                      {patient.historyOfPresentIllness ? (
-                        <div className="space-y-1 text-[11px] text-slate-300 font-medium">
-                          {patient.historyOfPresentIllness.onset && <div><strong>Onset:</strong> {patient.historyOfPresentIllness.onset}</div>}
-                          {patient.historyOfPresentIllness.character && <div><strong>Character:</strong> {patient.historyOfPresentIllness.character}</div>}
-                          {patient.historyOfPresentIllness.radiation && <div><strong>Radiation:</strong> {patient.historyOfPresentIllness.radiation}</div>}
+                    {/* Chief Complaint Presentation */}
+                    <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                      <span className="text-[10px] uppercase font-bold text-rose-400 block tracking-wider">
+                        Reported Symptoms & Complaint
+                      </span>
+                      <p className="text-slate-200 font-semibold text-xs leading-relaxed">
+                        "{patient.chiefComplaint || 'Acute presentation requiring immediate assessment'}"
+                      </p>
+                      {symptomCategory && (
+                        <span className="inline-block px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-bold">
+                          {symptomCategory}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Casualty Bed Allocation Card */}
+                    <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2.5">
+                      <span className="text-[10px] uppercase font-bold text-teal-400 block tracking-wider flex items-center justify-between">
+                        <span>Casualty Bed Allocation</span>
+                        <Bed className="w-3.5 h-3.5" />
+                      </span>
+                      
+                      {patient.assignedBed ? (
+                        <div className="p-2 bg-emerald-950/80 border border-emerald-500 text-emerald-300 font-bold rounded-xl text-center text-xs">
+                          Allocated: {patient.assignedBed}
                         </div>
                       ) : (
-                        <p className="text-slate-500 italic">Pre-consultation history gathered at kiosk.</p>
-                      )}
-                      <div className="pt-1.5 border-t border-slate-800/80">
-                        <span className="text-[10px] text-slate-400 font-bold block">Known Allergies:</span>
-                        <p className="text-rose-400 font-bold mt-0.5">
-                          {patient.drugAllergyHistory?.allergies || "No known drug allergies reported"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Trauma Bed Allocation & Direct Protocol Action */}
-                    <div className="p-4 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-bold text-slate-400 block">
-                          Casualty Bed / Trauma Bay Allocation:
-                        </label>
                         <select
-                          value={selectedBeds[patient.sessionId] || patient.assignedBed || CASUALTY_BEDS[0]}
+                          value={selectedBeds[patient.sessionId] || ""}
                           onChange={(e) => handleBedSelect(patient.sessionId, e.target.value)}
-                          className="w-full bg-slate-900 text-xs font-bold text-white p-2.5 rounded-xl border border-slate-700 focus:ring-2 focus:ring-rose-500 focus:outline-none cursor-pointer"
+                          aria-label="Select Casualty Bed"
+                          className="w-full bg-slate-900 border border-slate-700 text-white text-xs font-bold p-2.5 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none cursor-pointer"
                         >
+                          <option value="">Select Casualty Bed / Bay...</option>
                           {CASUALTY_BEDS.map((bed, bi) => (
                             <option key={bi} value={bed}>{bed}</option>
                           ))}
                         </select>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "Bed Allocated & Transfer Dispatched", selectedBeds[patient.sessionId] || CASUALTY_BEDS[0])}
-                        disabled={actionInProgress[`${patient.sessionId}_Bed Allocated & Transfer Dispatched`]}
-                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-1.5"
-                      >
-                        <Bed className="w-3.5 h-3.5" />
-                        <span>Confirm Bed Transfer</span>
-                      </button>
-                    </div>
-
-                  </div>
-
-                  {/* 1-Click Fast-Track Emergency Action Protocols */}
-                  <div className="bg-slate-950/90 rounded-2xl p-4 border border-rose-900/50 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center space-x-2">
-                      <Zap className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                        1-Click Emergency Orders:
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
+                      )}
                       
-                      {/* Stat ECG & Cardiac Biomarkers */}
-                      <button
-                        type="button"
-                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "Stat 12-Lead ECG + Troponin-I Ordered")}
-                        disabled={actionInProgress[`${patient.sessionId}_Stat 12-Lead ECG + Troponin-I Ordered`]}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-700/60 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1"
-                      >
-                        <HeartPulse className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Stat ECG + Trop-I</span>
-                      </button>
-
-                      {/* IV Cannulation & O2 Access */}
-                      <button
-                        type="button"
-                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "18G IV Cannulation & O2 Therapy Dispatched")}
-                        disabled={actionInProgress[`${patient.sessionId}_18G IV Cannulation & O2 Therapy Dispatched`]}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-700/60 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1"
-                      >
-                        <Activity className="w-3.5 h-3.5 text-blue-400" />
-                        <span>18G IV & O2 Support</span>
-                      </button>
-
-                      {/* Rapid Response Code */}
-                      <button
-                        type="button"
-                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "Rapid Response Trauma Team Paged")}
-                        disabled={actionInProgress[`${patient.sessionId}_Rapid Response Trauma Team Paged`]}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black transition-all shadow-md flex items-center space-x-1"
-                      >
-                        <Siren className="w-3.5 h-3.5" />
-                        <span>Dispatch Code Red</span>
-                      </button>
-
-                      {/* Open Full Clinical Review */}
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/physician/session/${patient.sessionId}`)}
-                        className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Emergency Doctor Review</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-
+                      <div className="text-[10px] text-slate-400 italic">
+                        {patient.assignedBed ? "Patient wheeled into allocated bay." : "Select bed to initiate casualty transport."}
+                      </div>
                     </div>
+
                   </div>
 
-                  {/* Action Log if present */}
+                  {/* Action Log if actions previously executed */}
                   {patient.emergencyActionLog && patient.emergencyActionLog.length > 0 && (
-                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] space-y-1">
-                      <span className="font-bold text-slate-400 block">Emergency Action Audit Trail:</span>
-                      <ul className="list-disc list-inside text-slate-300 space-y-0.5">
+                    <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1 text-xs">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Executed Stat Protocol Log:</span>
+                      <div className="flex flex-wrap gap-2">
                         {patient.emergencyActionLog.map((logItem, li) => (
-                          <li key={li} className="font-mono text-[10px] text-emerald-400">
-                            {logItem}
-                          </li>
+                          <span key={li} className="px-2.5 py-0.5 bg-rose-950 border border-rose-700 text-rose-200 text-[11px] font-mono rounded-md">
+                            ✓ {logItem}
+                          </span>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
+
+                  {/* Bottom Action Strip: Immediate 1-Click Orders */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[11px] font-bold text-slate-400">1-Click Stat Orders:</span>
+                      
+                      {/* Stat ECG */}
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "Stat 12-Lead ECG & Cardiac Enzymes", assignedBed)}
+                        disabled={actionInProgress[`${patient.sessionId}_Stat 12-Lead ECG & Cardiac Enzymes`]}
+                        className="px-3 py-1.5 bg-rose-800 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow cursor-pointer"
+                      >
+                        {actionInProgress[`${patient.sessionId}_Stat 12-Lead ECG & Cardiac Enzymes`] ? "Ordering..." : "⚡ Stat 12-Lead ECG"}
+                      </button>
+
+                      {/* IV Line & O2 */}
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "18G IV Cannula & High-Flow O2", assignedBed)}
+                        disabled={actionInProgress[`${patient.sessionId}_18G IV Cannula & High-Flow O2`]}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all cursor-pointer"
+                      >
+                        {actionInProgress[`${patient.sessionId}_18G IV Cannula & High-Flow O2`] ? "Ordering..." : "💉 18G IV & O2"}
+                      </button>
+
+                      {/* Code Red */}
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteEmergencyAction(patient.sessionId, "Code Red Resuscitation Team Dispatch", assignedBed)}
+                        disabled={actionInProgress[`${patient.sessionId}_Code Red Resuscitation Team Dispatch`]}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black rounded-xl animate-pulse shadow cursor-pointer"
+                      >
+                        {actionInProgress[`${patient.sessionId}_Code Red Resuscitation Team Dispatch`] ? "Dispatching..." : "🚨 Code Red Team"}
+                      </button>
+                    </div>
+
+                    {/* View Full Clinical EHR Note */}
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/physician/review/${patient.sessionId}`)}
+                        className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center space-x-1.5 cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Open Emergency Clinical File</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
 
                 </div>
               );

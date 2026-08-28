@@ -16,6 +16,8 @@ export interface PatientRegistration {
   phone?: string;
   language: LanguageCode;
   ayushMode: boolean;
+  homeopathyMode?: boolean;
+  medicalSystem?: 'allopathy' | 'ayurveda' | 'homeopathy';
   consent: ConsentDetails;
 }
 
@@ -122,6 +124,7 @@ export interface HistoryOfPresentIllness {
   symptomCategory?: string;
   clinicalRedFlagsChecked?: string[];
   ayushDetails?: Record<string, string>;
+  homeopathicDetails?: Record<string, string>;
 }
 
 export interface DrugAllergyHistory {
@@ -166,6 +169,8 @@ export interface PatientSession {
   gender: string;
   language: LanguageCode;
   ayushMode: boolean;
+  homeopathyMode?: boolean;
+  medicalSystem?: 'allopathy' | 'ayurveda' | 'homeopathy';
   connectivityStatus: ConnectivityStatus;
   flaggedForStaff: boolean;
   chiefComplaint: string;
@@ -221,6 +226,8 @@ export interface SuggestedDrug {
   frequency: string;
   duration: string;
   rationale: string;
+  potency?: string | null;
+  repetition?: string | null;
   contraindicationWarning?: string | null;
 }
 

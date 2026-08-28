@@ -15,6 +15,8 @@ class PatientRegistration(BaseModel):
     phone: Optional[str] = ""
     language: str = "en"
     ayushMode: bool = False
+    homeopathyMode: bool = False
+    medicalSystem: Literal["allopathy", "ayurveda", "homeopathy"] = "allopathy"
     consent: ConsentDetails = Field(default_factory=ConsentDetails)
 
 # --- Conversation & Question Models ---
@@ -40,6 +42,8 @@ class PatientAnswerRequest(BaseModel):
     answer: str
     mode: Literal["voice", "tap", "staff-manual"] = "tap"
     ayushMode: bool = False
+    homeopathyMode: bool = False
+    medicalSystem: Optional[Literal["allopathy", "ayurveda", "homeopathy"]] = None
     field: Optional[str] = None
     questionText: Optional[str] = None
 
@@ -91,6 +95,16 @@ class DocumentManualCorrectionRequest(BaseModel):
     extracted: Dict[str, Any]
 
 # --- Clinical Sub-Structures ---
+class HomeopathicCaseDetails(BaseModel):
+    thermalState: Optional[str] = None # Chilly vs Hot patient
+    thirst: Optional[str] = None # Thirsty vs Thirstless, quantity & frequency
+    sideAffinity: Optional[str] = None # Right-sided vs Left-sided
+    modalitiesAggravation: Optional[str] = None # Factors that worsen symptoms (<)
+    modalitiesAmelioration: Optional[str] = None # Factors that relieve symptoms (>)
+    mindGenerals: Optional[str] = None # Restlessness, irritability, weepiness, fear
+    physicalGenerals: Optional[str] = None # Perspiration, appetite, sleep
+    miasmaticTendency: Optional[str] = None # Psora / Sycosis / Syphilis / Tubercular
+
 class HistoryOfPresentIllness(BaseModel):
     onset: str = ""
     site: str = ""
@@ -102,6 +116,7 @@ class HistoryOfPresentIllness(BaseModel):
     symptomCategory: Optional[str] = None
     clinicalRedFlagsChecked: Optional[List[str]] = Field(default_factory=list)
     ayushDetails: Optional[Dict[str, str]] = None
+    homeopathicDetails: Optional[Dict[str, str]] = None
 
 class DrugAllergyHistory(BaseModel):
     currentMedications: List[str] = Field(default_factory=list)
@@ -134,6 +149,8 @@ class PatientSession(BaseModel):
     gender: str
     language: str = "en"
     ayushMode: bool = False
+    homeopathyMode: bool = False
+    medicalSystem: Literal["allopathy", "ayurveda", "homeopathy"] = "allopathy"
     connectivityStatus: Literal["online", "degraded", "offline"] = "online"
     flaggedForStaff: bool = False
     chiefComplaint: str = ""
@@ -143,34 +160,29 @@ class PatientSession(BaseModel):
     familyHistory: List[str] = Field(default_factory=list)
     personalHistory: PersonalHistory = Field(default_factory=PersonalHistory)
     reviewOfSystems: str = ""
-    
-    # Mandatory Baseline OPD Vitals
-    vitals: PatientVitals = Field(default_factory=PatientVitals)
-    
-    # --- Nurse-Grade Clinical Synthesis Fields for Physician Dashboard ---
+    vitals: Optional[PatientVitals] = Field(default_factory=PatientVitals)
+    documents: List[PriorInvestigation] = Field(default_factory=list)
+    priorInvestigations: List[PriorInvestigation] = Field(default_factory=list)
+    conversationTurns: List[QAPair] = Field(default_factory=list)
+    fieldProvenance: Dict[str, str] = Field(default_factory=dict)
+    enteredByStaffId: Optional[str] = None
     nurseSummary: Optional[str] = ""
     pertinentPositives: List[str] = Field(default_factory=list)
     pertinentNegatives: List[str] = Field(default_factory=list)
     triageAcuity: Literal["Routine", "Semi-urgent", "Priority Emergency"] = "Routine"
     nurseRecommendations: List[str] = Field(default_factory=list)
-
-    # --- Department & Doctor Routing ---
-    departmentRouting: DepartmentRouting = Field(default_factory=DepartmentRouting)
-    staffCallActive: bool = False
-    staffCallReason: Optional[str] = None
-
-    priorInvestigations: List[PriorInvestigation] = Field(default_factory=list)
-    redFlag: RedFlag = Field(default_factory=RedFlag)
+    departmentRouting: Optional[DepartmentRouting] = None
     assignedBed: Optional[str] = None
     emergencyActionLog: List[str] = Field(default_factory=list)
-    fieldProvenance: Dict[str, str] = Field(default_factory=dict)
-    enteredByStaffId: Optional[str] = None
-    physicianReviewStatus: Literal["Pending confirmation", "Accepted", "Amended", "Rejected"] = "Pending confirmation"
+    physicianReviewStatus: Literal["Pending confirmation", "Pending", "Accepted", "Amended", "Rejected"] = "Pending confirmation"
     physicianNotes: Optional[str] = ""
     sectionReviews: Dict[str, Literal["accepted", "amended", "rejected"]] = Field(default_factory=dict)
-    conversationTurns: List[QAPair] = Field(default_factory=list)
-    createdAt: str
-    updatedAt: str
+    redFlag: RedFlag = Field(default_factory=RedFlag)
+    staffCallActive: bool = False
+    staffCallReason: Optional[str] = None
+    timestamp: Optional[str] = ""
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
     status: Literal["in_progress", "scanned", "confirmed", "in_physician_review", "completed"] = "in_progress"
     version: int = 1
 
@@ -181,17 +193,17 @@ class EmergencyActionRequest(BaseModel):
     notes: Optional[str] = None
     dispatchedBy: Optional[str] = "Emergency Triage Officer"
 
-# --- Staff & Connectivity Models ---
-class StaffLoginRequest(BaseModel):
-    username: str
-    password: str
-
+# --- Staff & User Models ---
 class StaffAccount(BaseModel):
     staffId: str
     username: str
     fullName: str
     role: str
     department: str
+
+class StaffLoginRequest(BaseModel):
+    username: str
+    password: str
 
 class StaffCallRequest(BaseModel):
     reason: Optional[str] = "Patient requested triage assistance / Ambiguous symptoms"
@@ -244,6 +256,8 @@ class SuggestedDrug(BaseModel):
     frequency: str
     duration: str
     rationale: str
+    potency: Optional[str] = None
+    repetition: Optional[str] = None
     contraindicationWarning: Optional[str] = None
 
 class CDSSResponse(BaseModel):

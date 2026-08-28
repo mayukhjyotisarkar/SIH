@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Globe, Volume2, ShieldCheck, User, Sparkles, 
-  CheckCircle2, ArrowRight, HeartPulse 
+  CheckCircle2, ArrowRight, HeartPulse, Stethoscope, Droplets, Leaf
 } from 'lucide-react';
 import { LanguageCode, PatientRegistration, ConsentDetails } from '../../types';
 import { translations } from '../../utils/i18n';
@@ -27,7 +27,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
   const [fullName, setFullName] = useState<string>('Ramesh Chandra Sharma');
   const [age, setAge] = useState<number>(52);
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
-  const [ayushMode, setAyushMode] = useState<boolean>(false);
+  const [medicalSystem, setMedicalSystem] = useState<'allopathy' | 'ayurveda' | 'homeopathy'>('allopathy');
 
   const [consent, setConsent] = useState<ConsentDetails>({
     recordVoice: true,
@@ -53,7 +53,9 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
       age: Number(age) || 30,
       gender,
       language: currentLang,
-      ayushMode,
+      ayushMode: medicalSystem === 'ayurveda',
+      homeopathyMode: medicalSystem === 'homeopathy',
+      medicalSystem,
       consent,
     });
   };
@@ -69,7 +71,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold">{t.identifyTitle}</h2>
         <p className="text-sm text-teal-100 mt-1 max-w-xl">
-          Quick intake to prepare your clinical file for the doctor. Select your language and details below.
+          Quick intake to prepare your clinical file for the doctor. Select your language, clinical system, and details below.
         </p>
       </div>
 
@@ -87,7 +89,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
                 type="button"
                 key={lang.code}
                 onClick={() => onLanguageChange(lang.code)}
-                className={`py-3 px-3 rounded-xl border-2 text-center transition-all min-h-[48px] ${
+                className={`py-3 px-3 rounded-xl border-2 text-center transition-all min-h-[48px] cursor-pointer ${
                   currentLang === lang.code
                     ? 'border-teal-600 bg-teal-50 text-teal-900 font-bold shadow-sm'
                     : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700'
@@ -100,7 +102,100 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
           </div>
         </div>
 
-        {/* 2. ABHA Mode vs New Patient Mode */}
+        {/* 2. System of Medicine Selector (Allopathy / Ayurveda / Homeopathy) */}
+        <div>
+          <label className="block text-sm font-bold text-slate-800 mb-3 flex items-center justify-between">
+            <span className="flex items-center space-x-2">
+              <HeartPulse className="w-4 h-4 text-teal-600" />
+              <span>Select System of Medicine (OPD Track)</span>
+            </span>
+            <span className="text-xs text-slate-500 font-normal">AYUSH & Modern Medicine</span>
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            
+            {/* 1. Allopathy Card */}
+            <button
+              type="button"
+              onClick={() => setMedicalSystem('allopathy')}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                medicalSystem === 'allopathy'
+                  ? 'border-teal-600 bg-teal-50/80 text-teal-950 shadow-md ring-2 ring-teal-500/20'
+                  : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 rounded-xl bg-teal-100 text-teal-800">
+                  <Stethoscope className="w-5 h-5" />
+                </div>
+                {medicalSystem === 'allopathy' && (
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                )}
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900">Modern Allopathy</h4>
+                <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                  MBBS/MD Specialist OPD • SOCRATES triage & evidence-based care.
+                </p>
+              </div>
+            </button>
+
+            {/* 2. Ayurveda Card */}
+            <button
+              type="button"
+              onClick={() => setMedicalSystem('ayurveda')}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                medicalSystem === 'ayurveda'
+                  ? 'border-amber-600 bg-amber-50/80 text-amber-950 shadow-md ring-2 ring-amber-500/20'
+                  : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-800">
+                  <Leaf className="w-5 h-5" />
+                </div>
+                {medicalSystem === 'ayurveda' && (
+                  <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                )}
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900">AYUSH Ayurveda</h4>
+                <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                  BAMS/MD Ayu • Dashavidha Pariksha, Prakriti, Agni & Doshas.
+                </p>
+              </div>
+            </button>
+
+            {/* 3. Homeopathy Card */}
+            <button
+              type="button"
+              onClick={() => setMedicalSystem('homeopathy')}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                medicalSystem === 'homeopathy'
+                  ? 'border-cyan-600 bg-cyan-50/80 text-cyan-950 shadow-md ring-2 ring-cyan-500/20'
+                  : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 rounded-xl bg-cyan-100 text-cyan-800">
+                  <Droplets className="w-5 h-5" />
+                </div>
+                {medicalSystem === 'homeopathy' && (
+                  <CheckCircle2 className="w-4 h-4 text-cyan-600" />
+                )}
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900">AYUSH Homeopathy</h4>
+                <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                  BHMS/MD Hom • Totality, Thermals, Modalities (&lt; &amp; &gt;) &amp; Similimum.
+                </p>
+              </div>
+            </button>
+
+          </div>
+        </div>
+
+        {/* 3. ABHA Mode vs New Patient Mode */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
             <span className="text-sm font-bold text-slate-800">
@@ -110,7 +205,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
               <button
                 type="button"
                 onClick={() => setHasAbha(true)}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors cursor-pointer ${
                   hasAbha ? 'bg-teal-700 text-white shadow' : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
@@ -119,7 +214,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
               <button
                 type="button"
                 onClick={() => setHasAbha(false)}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors cursor-pointer ${
                   !hasAbha ? 'bg-teal-700 text-white shadow' : 'text-slate-700 hover:text-slate-900'
                 }`}
               >
@@ -184,7 +279,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
               <select
                 value={gender}
                 onChange={(e) => setGender(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none bg-white min-h-[48px]"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none bg-white min-h-[48px] cursor-pointer"
               >
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -192,36 +287,6 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
               </select>
             </div>
           </div>
-        </div>
-
-        {/* 3. AYUSH Mode Switch */}
-        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
-              <HeartPulse className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-amber-900">
-                {ayushMode ? t.ayushActive : t.ayushStandard}
-              </h4>
-              <p className="text-xs text-amber-800/80">
-                Switches the AI adaptive questions to Ayurvedic 'Dashavidha Pariksha' (Prakriti, Agni, Kostha).
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAyushMode(!ayushMode)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-              ayushMode ? 'bg-amber-600' : 'bg-slate-300'
-            }`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                ayushMode ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
         </div>
 
         {/* 4. Granular Consent Section (DPDP & ABDM Compliant) */}
@@ -234,7 +299,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
             <button
               type="button"
               onClick={() => playConsentAudio(currentLang)}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-100 hover:bg-teal-200 text-teal-900 rounded-lg transition-colors min-h-[36px]"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-100 hover:bg-teal-200 text-teal-900 rounded-lg transition-colors min-h-[36px] cursor-pointer"
             >
               <Volume2 className="w-3.5 h-3.5" />
               <span>{t.playAudio}</span>
@@ -252,7 +317,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
                 type="checkbox"
                 checked={consent.recordVoice}
                 onChange={(e) => setConsent({ ...consent, recordVoice: e.target.checked })}
-                className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 mt-0.5"
+                className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 mt-0.5 cursor-pointer"
               />
               <span className="text-xs sm:text-sm text-slate-700 font-medium">
                 {t.consentVoice}
@@ -265,7 +330,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
                 type="checkbox"
                 checked={consent.storeDocuments}
                 onChange={(e) => setConsent({ ...consent, storeDocuments: e.target.checked })}
-                className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 mt-0.5"
+                className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 mt-0.5 cursor-pointer"
               />
               <span className="text-xs sm:text-sm text-slate-700 font-medium">
                 {t.consentDocs}
@@ -278,7 +343,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
                 type="checkbox"
                 checked={consent.shareHospital}
                 onChange={(e) => setConsent({ ...consent, shareHospital: e.target.checked })}
-                className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 mt-0.5"
+                className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 mt-0.5 cursor-pointer"
               />
               <span className="text-xs sm:text-sm text-slate-700 font-medium">
                 {t.consentShare}
@@ -291,7 +356,7 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-teal-700/30 transition-all flex items-center justify-center space-x-2 min-h-[56px]"
+          className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-teal-700/30 transition-all flex items-center justify-center space-x-2 min-h-[56px] cursor-pointer"
         >
           {isLoading ? (
             <span>Preparing Kiosk Session...</span>
@@ -308,4 +373,3 @@ export const StepIdentify: React.FC<StepIdentifyProps> = ({
     </div>
   );
 };
-
