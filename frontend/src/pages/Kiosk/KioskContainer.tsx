@@ -217,6 +217,44 @@ export const KioskContainer: React.FC<KioskContainerProps> = ({
     }
   };
 
+  // Step 3: Delete Erroneous Document
+  const handleDeleteDoc = async (docId: string) => {
+    if (!session) return;
+    const activeId = session.sessionId || session.patientId;
+    setIsLoading(true);
+    try {
+      const updatedSession = await ApiService.deleteDocument(activeId, docId);
+      setSession(updatedSession);
+    } catch (err) {
+      console.error("Delete document error:", err);
+      setErrorMessage("Could not remove document.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Step 3: Replace / Re-Scan Document
+  const handleReplaceDoc = async (docId: string, file: File) => {
+    if (!session) return;
+    const activeId = session.sessionId || session.patientId;
+    setIsLoading(true);
+    try {
+      const newDoc = await ApiService.replaceDocument(activeId, docId, file);
+      const updatedDocs = session.priorInvestigations.map((d) =>
+        d.id === docId ? newDoc : d
+      );
+      setSession({
+        ...session,
+        priorInvestigations: updatedDocs,
+      });
+    } catch (err) {
+      console.error("Replace document error:", err);
+      setErrorMessage("Could not replace document.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Step 4: Confirm Intake Summary
   const handleConfirmSummary = async () => {
     if (!session) return;
@@ -321,6 +359,8 @@ export const KioskContainer: React.FC<KioskContainerProps> = ({
           onUploadFile={handleUploadFile}
           onLoadSample={handleLoadSample}
           onCorrectDoc={handleCorrectDoc}
+          onDeleteDoc={handleDeleteDoc}
+          onReplaceDoc={handleReplaceDoc}
           onProceedToSummary={() => setCurrentStep(4)}
           onBackToConverse={() => setCurrentStep(2)}
           isLoading={isLoading}

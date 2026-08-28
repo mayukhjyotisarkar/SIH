@@ -17,6 +17,8 @@ interface StepScanProps {
   onUploadFile: (file: File) => Promise<void>;
   onLoadSample: (sampleId: string) => Promise<void>;
   onCorrectDoc: (docId: string, extracted: any) => Promise<void>;
+  onDeleteDoc?: (docId: string) => Promise<void>;
+  onReplaceDoc?: (docId: string, file: File) => Promise<void>;
   onProceedToSummary: () => void;
   onBackToConverse: () => void;
   isLoading: boolean;
@@ -28,6 +30,8 @@ export const StepScan: React.FC<StepScanProps> = ({
   onUploadFile,
   onLoadSample,
   onCorrectDoc,
+  onDeleteDoc,
+  onReplaceDoc,
   onProceedToSummary,
   onBackToConverse,
   isLoading,
@@ -40,6 +44,9 @@ export const StepScan: React.FC<StepScanProps> = ({
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editFormData, setEditFormData] = useState<any>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [docToDelete, setDocToDelete] = useState<PriorInvestigation | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const replaceInputRef = React.useRef<HTMLInputElement>(null);
 
   const sampleOptions = [
     {
@@ -78,6 +85,38 @@ export const StepScan: React.FC<StepScanProps> = ({
     }
   };
 
+  const handleReplaceClick = () => {
+    if (replaceInputRef.current) {
+      replaceInputRef.current.value = '';
+      replaceInputRef.current.click();
+    }
+  };
+
+  const handleReplaceFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0] && activeDoc && onReplaceDoc) {
+      await onReplaceDoc(activeDoc.id, e.target.files[0]);
+    }
+  };
+
+  const handleDeleteClick = (doc: PriorInvestigation) => {
+    setDocToDelete(doc);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!docToDelete || !onDeleteDoc) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteDoc(docToDelete.id);
+      setDocToDelete(null);
+      const remaining = session.priorInvestigations.filter(d => d.id !== docToDelete.id);
+      setSelectedDocId(remaining.length > 0 ? remaining[0].id : null);
+    } catch (err) {
+      console.error('Delete error:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleStartEdit = (doc: PriorInvestigation) => {
     setEditFormData(JSON.parse(JSON.stringify(doc.extracted || {})));
     setIsEditing(true);
@@ -96,6 +135,15 @@ export const StepScan: React.FC<StepScanProps> = ({
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       
+      {/* Hidden File Input for Document Replacement */}
+      <input
+        type="file"
+        ref={replaceInputRef}
+        accept="image/*,application/pdf,.pdf"
+        onChange={handleReplaceFileChange}
+        className="hidden"
+      />
+
       {/* Step Header */}
       <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-slate-200">
         <div className="flex items-center space-x-2 text-teal-700 text-xs font-bold uppercase tracking-wider mb-2">
@@ -181,19 +229,18 @@ export const StepScan: React.FC<StepScanProps> = ({
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Attached Medical Records ({session.priorInvestigations.length})
             </h4>
-            <span className="text-xs text-slate-400">Click a record to view details</span>
+            <span className="text-xs text-slate-400">Click a record to view or edit</span>
           </div>
 
           <div className="flex space-x-3 overflow-x-auto pb-2">
             {session.priorInvestigations.map((doc, idx) => (
-              <button
-                type="button"
+              <div
                 key={doc.id}
                 onClick={() => {
                   setSelectedDocId(doc.id);
                   setIsEditing(false);
                 }}
-                className={`p-3.5 rounded-xl border-2 text-left shrink-0 w-64 transition-all ${
+                className={`p-3.5 rounded-xl border-2 text-left shrink-0 w-64 transition-all cursor-pointer relative group ${
                   (activeDoc?.id === doc.id)
                     ? 'border-teal-600 bg-teal-50/70 shadow-md'
                     : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
@@ -201,11 +248,26 @@ export const StepScan: React.FC<StepScanProps> = ({
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-bold text-teal-800 truncate">Doc #{idx + 1}</span>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                    doc.confidence >= 0.85 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {Math.round(doc.confidence * 100)}% Conf
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      doc.confidence >= 0.85 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {Math.round(doc.confidence * 100)}%
+                    </span>
+                    {onDeleteDoc && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(doc);
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors"
+                        title="Delete this mistakenly attached document"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="text-xs font-bold text-slate-900 truncate">{doc.document}</div>
                 {doc.flag && (
@@ -214,8 +276,23 @@ export const StepScan: React.FC<StepScanProps> = ({
                     <span>{doc.flag}</span>
                   </div>
                 )}
-              </button>
+              </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State when 0 Documents attached */}
+      {session.priorInvestigations.length === 0 && (
+        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center space-y-3">
+          <div className="w-12 h-12 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center mx-auto">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-800">No Medical Documents Attached</h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+              If you removed a wrong document, you can upload the correct prescription or lab report above, or proceed directly to review your symptoms.
+            </p>
           </div>
         </div>
       )}
@@ -224,7 +301,7 @@ export const StepScan: React.FC<StepScanProps> = ({
       {activeDoc && (
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           
-          {/* Card Header with Confidence Indicator & Edit Button */}
+          {/* Card Header with Confidence Indicator, Replace, Edit & Delete Buttons */}
           <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center space-x-2">
@@ -236,7 +313,7 @@ export const StepScan: React.FC<StepScanProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* Confidence Meter */}
               <div className="flex items-center space-x-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
                 <span className="text-xs text-slate-400 font-medium">Confidence:</span>
@@ -246,6 +323,20 @@ export const StepScan: React.FC<StepScanProps> = ({
                   {Math.round(activeDoc.confidence * 100)}%
                 </span>
               </div>
+
+              {/* Replace / Re-Scan Button */}
+              {onReplaceDoc && (
+                <button
+                  type="button"
+                  onClick={handleReplaceClick}
+                  disabled={isLoading}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white rounded-lg flex items-center space-x-1.5 transition-colors shadow-sm"
+                  title="Replace this document with a new photo or PDF"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Replace / Re-Scan</span>
+                </button>
+              )}
 
               {/* Edit Fields Button */}
               {!isEditing ? (
@@ -265,6 +356,20 @@ export const StepScan: React.FC<StepScanProps> = ({
                 >
                   <Save className="w-3.5 h-3.5" />
                   <span>Save Edits</span>
+                </button>
+              )}
+
+              {/* Delete Document Button */}
+              {onDeleteDoc && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteClick(activeDoc)}
+                  disabled={isLoading}
+                  className="px-3 py-1.5 bg-rose-600/90 hover:bg-rose-600 text-xs font-bold text-white rounded-lg flex items-center space-x-1.5 transition-colors shadow-sm"
+                  title="Delete this mistakenly entered document"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
                 </button>
               )}
 
@@ -653,6 +758,55 @@ export const StepScan: React.FC<StepScanProps> = ({
             </div>
             <div className="overflow-auto flex-1 flex items-center justify-center bg-slate-100 rounded-xl p-2">
               <img src={previewImage} alt="Document" className="max-h-[70vh] object-contain rounded" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {docToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-slate-900">Remove Mistaken Document?</h3>
+                <p className="text-xs text-slate-600">
+                  Are you sure you want to delete <strong className="text-slate-900 font-bold">{docToDelete.document}</strong>?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center space-x-1.5 text-amber-950">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Automatic Profile Clean-Up:</span>
+              </div>
+              <p className="leading-relaxed">
+                All medications and lab findings extracted from this document will be removed from your consultation summary. You can upload or re-scan the correct document immediately.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-300 min-h-[42px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md flex items-center space-x-1.5 min-h-[42px] disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? "Deleting..." : "Yes, Delete Document"}</span>
+              </button>
             </div>
           </div>
         </div>

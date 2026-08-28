@@ -137,6 +137,23 @@ export class ApiService {
     return this.handleResponse(res);
   }
 
+  static async deleteDocument(sessionId: string, documentId: string): Promise<PatientSession> {
+    const res = await fetch(`${API_BASE}/session/${sessionId}/document/${documentId}`, {
+      method: 'DELETE'
+    });
+    return this.handleResponse<PatientSession>(res);
+  }
+
+  static async replaceDocument(sessionId: string, documentId: string, file: File): Promise<PriorInvestigation> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/session/${sessionId}/document/${documentId}/replace`, {
+      method: 'POST',
+      body: formData
+    });
+    return this.handleResponse<PriorInvestigation>(res);
+  }
+
   // --- Summary & Confirm ---
   static async confirmSession(sessionId: string): Promise<{
     status: string;

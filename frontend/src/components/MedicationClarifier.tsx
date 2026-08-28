@@ -381,3 +381,4 @@ export const MedicationClarifier: React.FC<MedicationClarifierProps> = ({
     </div>
   );
 };
+

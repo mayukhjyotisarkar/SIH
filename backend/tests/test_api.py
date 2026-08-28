@@ -838,6 +838,49 @@ def test_dynamic_medication_clarification_engine():
     assert continue_plan.stopAfterAnswer is True
 
 
+def test_delete_and_replace_erroneous_document():
+    """
+    Verifies that a mistakenly entered document can be deleted or replaced:
+    - Adding an incorrect document syncs its medications
+    - Deleting the document removes it and cleans up the medication list and clinical profile
+    """
+    # 1. Start Session
+    resp = client.post("/api/session/start", json={
+        "fullName": "Suresh Patel",
+        "age": 50,
+        "gender": "Male",
+        "language": "en"
+    })
+    assert resp.status_code == 200
+    s_id = resp.json()["sessionId"]
+
+    # 2. Attach a wrong document (e.g. Printed Rx)
+    doc_resp = client.post(f"/api/session/{s_id}/document/sample/sample_printed_rx")
+    assert doc_resp.status_code == 200
+    doc_id = doc_resp.json()["id"]
+
+    # Verify session has document and cross-synced medications
+    sum_before = client.get(f"/api/session/{s_id}/summary").json()
+    assert len(sum_before["priorInvestigations"]) == 1
+    assert len(sum_before["drugAllergyHistory"]["currentMedications"]) > 0
+
+    # 3. Patient deletes the mistaken document
+    del_resp = client.delete(f"/api/session/{s_id}/document/{doc_id}")
+    assert del_resp.status_code == 200
+    updated_session = del_resp.json()
+
+    # Verify document is removed and medications are purged
+    assert len(updated_session["priorInvestigations"]) == 0
+    assert len(updated_session["drugAllergyHistory"]["currentMedications"]) == 0
+
+    # 4. Patient attaches the correct document (e.g. Lab Report)
+    correct_resp = client.post(f"/api/session/{s_id}/document/sample/sample_lab_report")
+    assert correct_resp.status_code == 200
+    sum_after = client.get(f"/api/session/{s_id}/summary").json()
+    assert len(sum_after["priorInvestigations"]) == 1
+    assert sum_after["priorInvestigations"][0]["documentType"] == "lab_report"
+
+
 
 
 

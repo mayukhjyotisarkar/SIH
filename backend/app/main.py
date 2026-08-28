@@ -451,6 +451,87 @@ async def correct_document_extraction(session_id: str, req: DocumentManualCorrec
     session_store.update_session(session_id, session)
     return {"status": "corrected", "session": session}
 
+def _rebuild_session_document_data(session: PatientSession):
+    """
+    Rebuilds medications, past diagnoses, and clinical summary when a document is deleted.
+    """
+    # Reset baseline medications from interview conversation turns
+    base_meds = []
+    for t in session.conversationTurns:
+        f_lower = t.field.lower()
+        if any(k in f_lower for k in ["meds", "medication", "tablet", "prescription"]):
+            ans_clean = t.patientAnswer.strip()
+            if not any(w in ans_clean.lower() for w in ["no ", "none", "without", "denies", "no regular"]):
+                base_meds.append(ans_clean)
+    session.drugAllergyHistory.currentMedications = base_meds
+
+    # Reset baseline past medical history
+    base_past = []
+    for t in session.conversationTurns:
+        f_lower = t.field.lower()
+        if any(k in f_lower for k in ["past", "comorbid", "chronic", "history"]):
+            ans_clean = t.patientAnswer.strip()
+            if not any(w in ans_clean.lower() for w in ["no ", "none", "without", "denies", "no prior"]):
+                base_past.append(ans_clean)
+    session.pastMedicalHistory = base_past if base_past else ["No prior chronic hospital admissions reported"]
+
+    # Re-sync from remaining attached documents
+    for doc in session.priorInvestigations:
+        _sync_document_to_session_clinical_data(session, doc)
+
+@app.delete("/api/session/{session_id}/document/{doc_id}")
+async def delete_document(session_id: str, doc_id: str):
+    """
+    Deletes an erroneously uploaded or scanned document from the patient's session.
+    Rebuilds medication and clinical profile dynamically.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    initial_len = len(session.priorInvestigations)
+    session.priorInvestigations = [d for d in session.priorInvestigations if d.id != doc_id]
+
+    if len(session.priorInvestigations) == initial_len:
+        raise HTTPException(status_code=404, detail="Document not found in session")
+
+    # Rebuild clinical state and cross-synced medications
+    _rebuild_session_document_data(session)
+
+    if len(session.priorInvestigations) == 0:
+        session.status = "in_progress"
+    
+    session_store.update_session(session_id, session)
+    return session
+
+@app.post("/api/session/{session_id}/document/{doc_id}/replace")
+async def replace_document(session_id: str, doc_id: str, file: UploadFile = File(...)):
+    """
+    Replaces an existing document with a newly uploaded or scanned photo/PDF.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Remove old document
+    session.priorInvestigations = [d for d in session.priorInvestigations if d.id != doc_id]
+
+    # Process new document
+    file_bytes = await file.read()
+    investigation = await ocr_service.process_document_upload(
+        file_bytes=file_bytes,
+        filename=file.filename or "replaced_document.png",
+        content_type=file.content_type or "image/png"
+    )
+
+    session.priorInvestigations.append(investigation)
+    _rebuild_session_document_data(session)
+    session.fieldProvenance["priorInvestigations"] = "document-extraction"
+    session.status = "scanned"
+    session_store.update_session(session_id, session)
+
+    return investigation
+
 @app.get("/api/sample-docs/{sample_id}/image")
 async def get_sample_document_image(sample_id: str):
     """Serves generated sample document PNG preview images."""
