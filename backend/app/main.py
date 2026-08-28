@@ -19,7 +19,9 @@ from app.models import (
     StaffLoginRequest, StaffTakeoverRequest, ConnectivityUpdateRequest,
     PhysicianSectionReviewRequest, StaffAccount, AudioTranscriptionResponse,
     DepartmentRouting, StaffCallRequest, DepartmentAssignmentRequest,
-    CDSSResponse, EmergencyActionRequest
+    CDSSResponse, EmergencyActionRequest, MedicationClarificationPlan,
+    MedicationClarificationAnswerRequest, MedicationClarificationAnswerResponse,
+    ExtractedMedicationItem
 )
 from app.store import session_store
 from app.services.red_flag_service import red_flag_detector
@@ -28,6 +30,7 @@ from app.services.routing_service import routing_service
 from app.services.ocr_service import ocr_service, SAMPLE_DOCS_DIR, UPLOADS_DIR
 from app.services.staff_service import staff_service
 from app.services.audio_service import audio_service
+from app.services.medication_clarification_service import MedicationClarificationService
 
 # Ensure sample images exist on disk on startup
 ocr_service.ensure_sample_images_exist()
@@ -490,6 +493,147 @@ async def get_uploaded_document_raw(doc_id: str):
             media_type = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
             return FileResponse(file_path, media_type=media_type)
     raise HTTPException(status_code=404, detail="Uploaded file not found")
+
+# --- DYNAMIC MEDICATION CLARIFICATION ENDPOINTS ---
+
+@app.post("/api/session/{session_id}/document/{doc_id}/medications/clarify/plan", response_model=MedicationClarificationPlan)
+async def plan_medication_clarification(session_id: str, doc_id: str, language: Optional[str] = None):
+    """
+    Dynamically evaluates extracted prescription medications using field confidence analysis.
+    Plans the single minimal necessary question for the patient, or determines if all data is reliable
+    or if >2 unclear items require staff escalation.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    doc = next((d for d in session.priorInvestigations if d.id == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found in session")
+
+    meds = doc.medicationItems or []
+    if not meds and doc.extracted and "medications" in doc.extracted:
+        meds = MedicationClarificationService.normalize_extracted_medications(
+            doc.extracted["medications"],
+            doc.documentType,
+            doc.confidence
+        )
+        doc.medicationItems = meds
+
+    lang = language or session.language or "en"
+    plan = MedicationClarificationService.plan_next_question(
+        medications=meds,
+        patient_age=session.age,
+        language=lang
+    )
+    
+    # Check if document has image URL to attach as crop context
+    plan.cropUrl = doc.imageUrl
+
+    # If >2 unclear medications require staff escalation
+    if plan.escalateToStaff:
+        doc.clarificationStatus = "escalated_to_staff"
+        session.flaggedForStaff = True
+        session_store.update_session(session_id, session)
+        await staff_service.broadcast_event("medication_escalated_to_staff", {
+            "sessionId": session.sessionId,
+            "patientName": session.patientName,
+            "documentId": doc.id,
+            "documentTitle": doc.document,
+            "unclearCount": plan.unclearMedicationCount,
+            "reason": plan.reason
+        })
+    elif plan.shouldAskPatient:
+        doc.clarificationStatus = "in_progress"
+        session_store.update_session(session_id, session)
+    else:
+        doc.clarificationStatus = "completed"
+        session_store.update_session(session_id, session)
+
+    return plan
+
+@app.post("/api/session/{session_id}/document/{doc_id}/medications/clarify/answer", response_model=MedicationClarificationAnswerResponse)
+async def answer_medication_clarification(session_id: str, doc_id: str, req: MedicationClarificationAnswerRequest):
+    """
+    Submits patient answer (voice or text), resolves multiple fields simultaneously,
+    updates the medication record, and dynamically re-evaluates the next minimal question.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    doc = next((d for d in session.priorInvestigations if d.id == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found in session")
+
+    meds = doc.medicationItems or []
+    target_med = next((m for m in meds if m.id == req.medicationId), None)
+    if not target_med:
+        raise HTTPException(status_code=404, detail="Target medication not found in document")
+
+    # Multi-field resolution from patient natural language answer
+    updated_med, resolved_fields = MedicationClarificationService.interpret_patient_answer(
+        answer=req.answer,
+        target_med=target_med,
+        language=req.language or session.language
+    )
+
+    # Update in document medication list
+    for i, m in enumerate(meds):
+        if m.id == updated_med.id:
+            meds[i] = updated_med
+            break
+    doc.medicationItems = meds
+
+    # Cross-sync verified medications into session clinical profile
+    _sync_document_to_session_clinical_data(session, doc)
+
+    # Dynamically plan next step
+    lang = req.language or session.language or "en"
+    next_plan = MedicationClarificationService.plan_next_question(
+        medications=meds,
+        patient_age=session.age,
+        language=lang
+    )
+    next_plan.cropUrl = doc.imageUrl
+
+    if not next_plan.shouldAskPatient:
+        doc.clarificationStatus = "escalated_to_staff" if next_plan.escalateToStaff else "completed"
+
+    session_store.update_session(session_id, session)
+
+    return MedicationClarificationAnswerResponse(
+        updatedMedication=updated_med,
+        resolvedFields=resolved_fields,
+        nextPlan=next_plan,
+        allMedications=meds
+    )
+
+@app.post("/api/session/{session_id}/document/{doc_id}/medications/escalate")
+async def escalate_medication_to_staff(session_id: str, doc_id: str, reason: Optional[str] = None):
+    """
+    Manually or deterministically escalates illegible prescription to hospital staff desk.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    doc = next((d for d in session.priorInvestigations if d.id == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found in session")
+
+    doc.clarificationStatus = "escalated_to_staff"
+    session.flaggedForStaff = True
+    session_store.update_session(session_id, session)
+
+    await staff_service.broadcast_event("medication_escalated_to_staff", {
+        "sessionId": session.sessionId,
+        "patientName": session.patientName,
+        "documentId": doc.id,
+        "documentTitle": doc.document,
+        "reason": reason or "Patient requested staff assistance for handwritten prescription."
+    })
+    return {"status": "escalated_to_staff", "sessionId": session_id, "documentId": doc_id}
 
 # --- SUMMARY & CONFIRMATION ---
 

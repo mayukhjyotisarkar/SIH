@@ -83,6 +83,66 @@ export interface MedicationItem {
   dosage: string;
   frequency: string;
   duration?: string;
+  timing?: string;
+  instructions?: string;
+}
+
+export interface MedicationConfidence {
+  medicine: number;
+  strength: number;
+  dosage: number;
+  frequency: number;
+  duration: number;
+  timing: number;
+  overall: number;
+}
+
+export interface ExtractedMedicationItem {
+  id: string;
+  name: string;
+  strength?: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  timing?: string;
+  instructions?: string;
+  source?: 'handwritten-prescription' | 'printed-prescription' | 'digital-pdf' | 'medicine-packaging' | 'patient-voice' | 'fuzzy-nlem-matched' | 'staff-verified';
+  confidence: MedicationConfidence;
+  status: 'reliable' | 'needs_clarification' | 'uncertain' | 'verified_by_patient' | 'escalated_to_staff';
+  unreliableFields: string[];
+  cropUrl?: string;
+}
+
+export interface MedicationClarificationPlan {
+  shouldAskPatient: boolean;
+  question?: string | null;
+  language: string;
+  targetMedicationId?: string;
+  targetMedicationName?: string;
+  informationNeeded: string[];
+  options: string[];
+  reason?: string;
+  stopAfterAnswer: boolean;
+  cropUrl?: string;
+  escalateToStaff: boolean;
+  unclearMedicationCount: number;
+  totalMedicationCount: number;
+  resolvedCount: number;
+}
+
+export interface MedicationClarificationAnswerRequest {
+  docId: string;
+  medicationId: string;
+  answer: string;
+  mode: 'voice' | 'tap' | 'type' | 'dont_know';
+  language?: string;
+}
+
+export interface MedicationClarificationAnswerResponse {
+  updatedMedication: ExtractedMedicationItem;
+  resolvedFields: string[];
+  nextPlan: MedicationClarificationPlan;
+  allMedications: ExtractedMedicationItem[];
 }
 
 export interface ExtractedDocumentData {
@@ -104,6 +164,7 @@ export interface PriorInvestigation {
   document: string;
   documentType: 'lab_report' | 'printed_prescription' | 'handwritten_prescription' | 'other';
   extracted: ExtractedDocumentData;
+  medicationItems?: ExtractedMedicationItem[];
   flag?: string | null;
   confidence: number;
   isSample: boolean;
@@ -111,6 +172,7 @@ export interface PriorInvestigation {
   imageUrl?: string;
   status: 'success' | 'needs_review' | 'failed';
   extractionSource?: 'vision_llm' | 'local_ocr_fallback' | 'sample_curated' | 'manual_correction';
+  clarificationStatus?: 'not_needed' | 'in_progress' | 'completed' | 'escalated_to_staff';
 }
 
 export interface AyurvedicCaseDetails {

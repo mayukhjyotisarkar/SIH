@@ -245,18 +245,36 @@ class OCRService:
         if confidence < 0.75:
             status = "needs_review"
 
+        # Generate typed ExtractedMedicationItem instances for prescriptions
+        med_items = None
+        clarification_status = "not_needed"
+        if extracted_data and "medications" in extracted_data:
+            from app.services.medication_clarification_service import MedicationClarificationService
+            med_items = MedicationClarificationService.normalize_extracted_medications(
+                extracted_data["medications"], doc_type, confidence
+            )
+            unclear_count = len([m for m in med_items if m.status == "needs_clarification"])
+            if unclear_count > 2:
+                clarification_status = "escalated_to_staff"
+            elif unclear_count > 0:
+                clarification_status = "in_progress"
+            else:
+                clarification_status = "completed"
+
         return PriorInvestigation(
             id=doc_id,
             document=filename,
             documentType=doc_type,
             extracted=extracted_data,
+            medicationItems=med_items,
             flag=flag,
             confidence=round(confidence, 2),
             isSample=False,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
             imageUrl=f"/api/documents/{doc_id}/image",
             status=status,
-            extractionSource=source
+            extractionSource=source,
+            clarificationStatus=clarification_status
         )
 
     @classmethod
@@ -297,18 +315,36 @@ class OCRService:
         doc_id = f"doc_{sample_id}_{uuid.uuid4().hex[:4]}"
         status = "needs_review" if confidence < 0.75 else "success"
 
+        # Generate typed ExtractedMedicationItem instances for sample prescriptions
+        med_items = None
+        clarification_status = "not_needed"
+        if extracted_data and "medications" in extracted_data:
+            from app.services.medication_clarification_service import MedicationClarificationService
+            med_items = MedicationClarificationService.normalize_extracted_medications(
+                extracted_data["medications"], doc_type, confidence
+            )
+            unclear_count = len([m for m in med_items if m.status == "needs_clarification"])
+            if unclear_count > 2:
+                clarification_status = "escalated_to_staff"
+            elif unclear_count > 0:
+                clarification_status = "in_progress"
+            else:
+                clarification_status = "completed"
+
         return PriorInvestigation(
             id=doc_id,
             document=meta["title"],
             documentType=doc_type,
             extracted=extracted_data,
+            medicationItems=med_items,
             flag=flag,
             confidence=round(confidence, 2),
             isSample=True,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
             status=status,
             imageUrl=f"/api/sample-docs/{sample_id}/image",
-            extractionSource=source
+            extractionSource=source,
+            clarificationStatus=clarification_status
         )
 
     @classmethod

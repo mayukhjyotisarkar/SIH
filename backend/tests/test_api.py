@@ -745,6 +745,100 @@ def test_allopathic_ebm_socrates_synthesis():
     assert any("ECG" in r or "vitals" in r.lower() for r in data["nurseRecommendations"])
 
 
+def test_dynamic_medication_clarification_engine():
+    """
+    Verifies the Dynamic LLM-Based Medication Clarification Engine:
+    - Minimal dynamic question planning without fixed questionnaires
+    - Multi-field simultaneous resolution from natural patient answer
+    - Immediate stopping condition upon sufficient data
+    - Deterministic escalation for >2 unclear items
+    - Quality check (no medical jargon in questions)
+    """
+    from app.services.medication_clarification_service import MedicationClarificationService
+    from app.models import ExtractedMedicationItem, MedicationConfidence
+
+    # 1. Create a session and attach a handwritten prescription
+    resp = client.post("/api/session/start", json={
+        "fullName": "Meera Banerjee",
+        "age": 42,
+        "gender": "Female",
+        "language": "en"
+    })
+    assert resp.status_code == 200
+    s_id = resp.json()["sessionId"]
+
+    # Load sample handwritten prescription
+    sample_resp = client.post(f"/api/session/{s_id}/document/sample/sample_handwritten_rx")
+    assert sample_resp.status_code == 200
+    doc_id = sample_resp.json()["id"]
+
+    # 2. Plan clarification
+    plan_resp = client.post(f"/api/session/{s_id}/document/{doc_id}/medications/clarify/plan?language=en")
+    assert plan_resp.status_code == 200
+    plan = plan_resp.json()
+
+    # If items need clarification, verify minimal single question
+    if plan["shouldAskPatient"]:
+        assert plan["question"] is not None
+        assert "dosage frequency" not in plan["question"].lower()
+        assert "route of administration" not in plan["question"].lower()
+        assert len(plan["informationNeeded"]) > 0
+
+        # 3. Submit natural language answer that simultaneously resolves multiple fields
+        target_med_id = plan["targetMedicationId"]
+        ans_resp = client.post(f"/api/session/{s_id}/document/{doc_id}/medications/clarify/answer", json={
+            "docId": doc_id,
+            "medicationId": target_med_id,
+            "answer": "It is Amoxyclav 625, I take one tablet in the morning and one at night after food",
+            "mode": "voice",
+            "language": "en"
+        })
+        assert ans_resp.status_code == 200
+        ans_data = ans_resp.json()
+        updated = ans_data["updatedMedication"]
+        
+        # Verify multi-field simultaneous resolution
+        assert updated["status"] == "verified_by_patient"
+        assert "Twice daily" in (updated["frequency"] or "") or "Morning & Night" in (updated["frequency"] or "")
+        assert "After food" in (updated["timing"] or "")
+        assert len(ans_data["resolvedFields"]) >= 2
+
+    # 4. Test deterministic escalation when >2 items are unreadable
+    unclear_mock_meds = [
+        ExtractedMedicationItem(
+            id=f"med_{i}",
+            name="Unidentified scribbled medicine",
+            confidence=MedicationConfidence(medicine=0.4, frequency=0.3),
+            status="needs_clarification",
+            unreliableFields=["medicine", "frequency"]
+        ) for i in range(4)
+    ]
+    escalate_plan = MedicationClarificationService.plan_next_question(unclear_mock_meds, patient_age=45, language="en")
+    assert escalate_plan.shouldAskPatient is False
+    assert escalate_plan.escalateToStaff is True
+    assert escalate_plan.unclearMedicationCount == 4
+
+    # 5. Test 0 unclear items -> immediate continue
+    reliable_mock_meds = [
+        ExtractedMedicationItem(
+            id="med_01",
+            name="Telmisartan 40mg",
+            strength="40 mg",
+            dosage="1 tablet",
+            frequency="Once daily",
+            timing="Morning",
+            confidence=MedicationConfidence(medicine=0.95, frequency=0.95),
+            status="reliable",
+            unreliableFields=[]
+        )
+    ]
+    continue_plan = MedicationClarificationService.plan_next_question(reliable_mock_meds, patient_age=45, language="en")
+    assert continue_plan.shouldAskPatient is False
+    assert continue_plan.escalateToStaff is False
+    assert continue_plan.stopAfterAnswer is True
+
+
+
 
 
 

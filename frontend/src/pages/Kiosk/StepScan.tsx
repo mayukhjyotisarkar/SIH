@@ -9,6 +9,7 @@ import {
 } from '../../types';
 import { translations } from '../../utils/i18n';
 import { AbnormalBadge } from '../../components/AbnormalBadge';
+import { MedicationClarifier } from '../../components/MedicationClarifier';
 
 interface StepScanProps {
   session: PatientSession;
@@ -493,24 +494,85 @@ export const StepScan: React.FC<StepScanProps> = ({
                   </div>
                 )}
 
-                {/* Prescriptions & Medications */}
+                {/* Prescriptions & Dynamic Medication Clarification */}
                 {activeDoc.extracted.medications && activeDoc.extracted.medications.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Extracted Prescription Medications
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {activeDoc.extracted.medications.map((med, idx) => (
-                        <div key={idx} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-1">
-                          <div className="font-bold text-slate-900 text-sm">{med.name}</div>
-                          <div className="text-xs text-slate-600">
-                            <span>Dosage: <strong>{med.dosage}</strong></span> • <span>Freq: {med.frequency}</span>
-                          </div>
-                          {med.duration && (
-                            <div className="text-[11px] text-slate-500 font-medium">Duration: {med.duration}</div>
-                          )}
-                        </div>
-                      ))}
+                  <div className="space-y-4">
+                    
+                    {/* Dynamic LLM-Based Minimal Question Clarifier */}
+                    <MedicationClarifier
+                      sessionId={session.sessionId}
+                      documentId={activeDoc.id}
+                      documentImageUrl={activeDoc.imageUrl}
+                      medicationItems={activeDoc.medicationItems || []}
+                      currentLang={currentLang}
+                      onMedicationsUpdated={(updatedMeds) => {
+                        activeDoc.medicationItems = updatedMeds;
+                      }}
+                    />
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Extracted Prescription Medications ({activeDoc.medicationItems?.length || activeDoc.extracted.medications.length})
+                        </h4>
+                        <span className="text-[11px] text-slate-500 font-medium">Field-level verification status</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {(activeDoc.medicationItems || activeDoc.extracted.medications).map((med: any, idx: number) => {
+                          const isClarified = med.status === 'verified_by_patient';
+                          const isReliable = med.status === 'reliable' || !med.status;
+                          const needsClarify = med.status === 'needs_clarification';
+                          const isUncertain = med.status === 'uncertain';
+                          const isEscalated = med.status === 'escalated_to_staff';
+
+                          return (
+                            <div 
+                              key={idx} 
+                              className={`p-3.5 rounded-xl border transition-all space-y-1.5 ${
+                                isClarified
+                                  ? 'border-emerald-300 bg-emerald-50/60 shadow-2xs'
+                                  : needsClarify
+                                  ? 'border-indigo-300 bg-indigo-50/40 shadow-xs'
+                                  : isEscalated
+                                  ? 'border-amber-300 bg-amber-50/40'
+                                  : 'border-slate-200 bg-slate-50/80'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="font-bold text-slate-900 text-sm">{med.name}</div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                  isClarified
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : needsClarify
+                                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                    : isUncertain
+                                    ? 'bg-slate-200 text-slate-700'
+                                    : isEscalated
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-slate-200/80 text-slate-700'
+                                }`}>
+                                  {isClarified ? '🗣️ Patient Verified' : needsClarify ? '🔍 Clarified with AI' : isEscalated ? '🛡️ Staff Desk' : '✓ Scanned'}
+                                </span>
+                              </div>
+
+                              <div className="text-xs text-slate-600 space-y-0.5">
+                                <div>
+                                  <span>Dosage: <strong>{med.dosage || med.strength || 'Standard'}</strong></span> • <span>Freq: <strong className="text-indigo-950">{med.frequency || 'Unspecified'}</strong></span>
+                                </div>
+                                {med.timing && (
+                                  <div className="text-[11px] text-teal-800 font-semibold">
+                                    Timing: {med.timing}
+                                  </div>
+                                )}
+                                {med.duration && (
+                                  <div className="text-[11px] text-slate-500 font-medium">Duration: {med.duration}</div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}

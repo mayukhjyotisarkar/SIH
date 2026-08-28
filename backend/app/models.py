@@ -77,11 +77,65 @@ class RedFlag(BaseModel):
     urgency: Literal["routine", "urgent", "emergency"] = "routine"
 
 # --- Document & OCR Models ---
+class MedicationConfidence(BaseModel):
+    medicine: float = 0.90
+    strength: float = 0.90
+    dosage: float = 0.85
+    frequency: float = 0.85
+    duration: float = 0.85
+    timing: float = 0.80
+    overall: float = 0.85
+
+class ExtractedMedicationItem(BaseModel):
+    id: str
+    name: str
+    strength: Optional[str] = None
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    duration: Optional[str] = None
+    timing: Optional[str] = None
+    instructions: Optional[str] = None
+    source: Literal["handwritten-prescription", "printed-prescription", "digital-pdf", "medicine-packaging", "patient-voice", "fuzzy-nlem-matched", "staff-verified"] = "handwritten-prescription"
+    confidence: MedicationConfidence = Field(default_factory=MedicationConfidence)
+    status: Literal["reliable", "needs_clarification", "uncertain", "verified_by_patient", "escalated_to_staff"] = "reliable"
+    unreliableFields: List[str] = Field(default_factory=list)
+    cropUrl: Optional[str] = None
+
+class MedicationClarificationPlan(BaseModel):
+    shouldAskPatient: bool = False
+    question: Optional[str] = None
+    language: str = "en"
+    targetMedicationId: Optional[str] = None
+    targetMedicationName: Optional[str] = None
+    informationNeeded: List[str] = Field(default_factory=list)
+    options: List[str] = Field(default_factory=list)
+    reason: Optional[str] = None
+    stopAfterAnswer: bool = False
+    cropUrl: Optional[str] = None
+    escalateToStaff: bool = False
+    unclearMedicationCount: int = 0
+    totalMedicationCount: int = 0
+    resolvedCount: int = 0
+
+class MedicationClarificationAnswerRequest(BaseModel):
+    docId: str
+    medicationId: str
+    answer: str
+    mode: Literal["voice", "tap", "type", "dont_know"] = "voice"
+    language: str = "en"
+
+class MedicationClarificationAnswerResponse(BaseModel):
+    updatedMedication: ExtractedMedicationItem
+    resolvedFields: List[str] = Field(default_factory=list)
+    nextPlan: MedicationClarificationPlan
+    allMedications: List[ExtractedMedicationItem] = Field(default_factory=list)
+
 class PriorInvestigation(BaseModel):
     id: str
     document: str
     documentType: Literal["lab_report", "printed_prescription", "handwritten_prescription", "other"]
     extracted: Dict[str, Any] = Field(default_factory=dict)
+    medicationItems: Optional[List[ExtractedMedicationItem]] = None
     flag: Optional[str] = None
     confidence: float = 0.95
     isSample: bool = False
@@ -89,6 +143,7 @@ class PriorInvestigation(BaseModel):
     imageUrl: Optional[str] = None
     status: Literal["success", "needs_review", "failed"] = "success"
     extractionSource: Literal["vision_llm", "local_ocr_fallback", "sample_curated", "manual_correction"] = "sample_curated"
+    clarificationStatus: Literal["not_needed", "in_progress", "completed", "escalated_to_staff"] = "not_needed"
 
 class DocumentManualCorrectionRequest(BaseModel):
     documentId: str
