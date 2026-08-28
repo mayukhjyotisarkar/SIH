@@ -610,16 +610,19 @@ SAFETY RULES:
                 pertinent_positives.append(f"Thirst Pattern: {ans}")
             elif "modalit" in f:
                 homeopathic_details["modalitiesAggravation"] = ans
+                homeopathic_details["modalities"] = ans
                 pertinent_positives.append(f"Homeopathic Modalities: {ans}")
             elif "mind" in f or "emotional" in f:
                 homeopathic_details["mindGenerals"] = ans
                 pertinent_positives.append(f"Mind Generals: {ans}")
             elif "cravings" in f or "aversions" in f or "food" in f:
+                homeopathic_details["foodCravingsAversions"] = ans
                 homeopathic_details["physicalGenerals"] = ans
-                pertinent_positives.append(f"Food Cravings: {ans}")
+                pertinent_positives.append(f"Food Cravings/Aversions: {ans}")
             elif "side_affinity" in f or "perspiration" in f:
                 homeopathic_details["sideAffinity"] = ans
-                pertinent_positives.append(f"Physical Generals: {ans}")
+                homeopathic_details["perspiration"] = ans
+                pertinent_positives.append(f"Physical Generals & Side Affinity: {ans}")
             elif "vitals" in f or "weight" in f or "height" in f or "blood_pressure" in f or "bp" in f:
                 if any(w in ans_lower for w in ["prefer not", "skip", "decline", "withheld"]):
                     vitals.disclosureStatus = "declined"
@@ -678,24 +681,29 @@ SAFETY RULES:
                 "Evaluate for Sodhana Chikitsa (Panchakarma / Basti / Virechana) if chronic"
             ]
         elif homeopathy_mode or medical_system == "homeopathy":
-            thermal_val = homeopathic_details.get("thermalState") or "Thermal state recorded"
-            thirst_val = homeopathic_details.get("thirst") or "Thirst evaluated"
-            mind_val = homeopathic_details.get("mindGenerals") or "Mind generals documented"
-            modalities_val = homeopathic_details.get("modalitiesAggravation") or "Modalities assessed"
+            thermal_val = homeopathic_details.get("thermalState") or "Thermal tolerance documented"
+            thirst_val = homeopathic_details.get("thirst") or "Thirst pattern assessed"
+            mind_val = homeopathic_details.get("mindGenerals") or "Mind & emotional disposition recorded"
+            modalities_val = homeopathic_details.get("modalitiesAggravation") or homeopathic_details.get("modalities") or "Modalities (< & >) documented"
+            cravings_val = homeopathic_details.get("foodCravingsAversions") or homeopathic_details.get("physicalGenerals") or "Food cravings evaluated"
+            side_val = homeopathic_details.get("sideAffinity") or "Side affinity recorded"
             
             nurse_summary_narrative = (
-                f"Patient presents with {chief_complaint} in Homeopathic OPD. "
-                f"Classical intake demonstrates {thermal_val} with {thirst_val}. "
+                f"Patient presents with {chief_complaint} in AYUSH Homeopathic OPD. "
+                f"Classical Totality of Symptoms intake demonstrates {thermal_val} with {thirst_val}. "
                 f"Mind & Emotional Generals: {mind_val}. "
-                f"Key Modalities: {modalities_val}. "
+                f"Key Modalities & Triggers (< / >): {modalities_val}. "
+                f"Physical Generals & Food Cravings: {cravings_val}. "
+                f"Lateral & Perspiration Affinity: {side_val}. "
                 f"Current Medications: {meds_text}. "
-                f"Prepared for Homeopathic Physician review."
+                f"Synthesized for Homeopathic Medical Officer (BHMS / MD Homeopathy) review."
             )
             recommendations = [
-                "Case repertorization based on totality of characteristic symptoms and modalities",
-                "Evaluate for single simillimum constitutional remedy in appropriate potency",
-                "Advise general dietary restrictions (avoid strong raw camphor/onion/coffee with remedies)",
-                "Schedule follow-up review after 2-4 weeks to assess symptom progression"
+                "Perform Kent / Boenninghausen repertorization on Totality of Characteristic Generals & Modalities",
+                "Select Single Simillimum Constitutional Remedy in optimal potency (30C / 200C / 1M / LM)",
+                "Check for Miasmatic Block / Anti-miasmatic intercurrent remedy (Psoric/Sycotic/Syphilitic) if indicated",
+                "Advise standard homeopathic dietary rules (Avoid strong raw camphor, eucalyptus, raw onion with doses)",
+                "Schedule follow-up review in 2-4 weeks to assess direction of cure (Hering's Law)"
             ]
         else:
             nurse_summary_narrative = (

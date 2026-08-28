@@ -744,18 +744,38 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
           )}
 
           {/* AYUSH Homeopathy Details if available */}
-          {session.historyOfPresentIllness?.homeopathicDetails && (
-            <div className="p-3.5 bg-cyan-50 rounded-xl border border-cyan-200 text-xs space-y-1 mt-2">
-              <strong className="text-cyan-950 font-bold flex items-center gap-1">
-                <span>💧 AYUSH Homeopathy Totality &amp; Modalities Findings:</span>
-              </strong>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {Object.entries(session.historyOfPresentIllness.homeopathicDetails).map(([k, v]) => (
-                  <div key={k} className="bg-white/80 p-2 rounded-lg border border-cyan-100">
-                    <span className="capitalize font-bold text-cyan-900 block">{k.replace(/([A-Z])/g, ' $1')}: </span>
-                    <span className="text-slate-800 font-medium">{v}</span>
-                  </div>
-                ))}
+          {(session.historyOfPresentIllness?.homeopathicDetails || session.homeopathyMode || session.medicalSystem === 'homeopathy') && session.historyOfPresentIllness?.homeopathicDetails && (
+            <div className="p-4 bg-gradient-to-br from-cyan-50 to-sky-50 rounded-2xl border border-cyan-300 text-xs space-y-2.5 mt-3 shadow-sm">
+              <div className="flex items-center justify-between border-b border-cyan-200 pb-2">
+                <strong className="text-cyan-950 font-extrabold flex items-center gap-1.5 text-sm">
+                  <span>💧 AYUSH Homeopathy Totality of Characteristic Symptoms &amp; Modalities Dossier</span>
+                </strong>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-cyan-200/80 text-cyan-900 px-2 py-0.5 rounded-full border border-cyan-300">
+                  Homeopathic OPD Protocol
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {Object.entries(session.historyOfPresentIllness.homeopathicDetails).map(([k, v]) => {
+                  const labels: Record<string, string> = {
+                    thermalState: 'Thermal State (Tolerance to Cold / Heat)',
+                    thirst: 'Thirst & Drinking Pattern',
+                    modalitiesAggravation: 'Key Modalities (< Aggravation / > Amelioration)',
+                    modalities: 'Key Modalities (< Aggravation / > Amelioration)',
+                    mindGenerals: 'Mind & Emotional Disposition',
+                    foodCravingsAversions: 'Food Cravings & Aversions',
+                    physicalGenerals: 'Physical Generals & Sleep Posture',
+                    sideAffinity: 'Lateral Affinity & Perspiration',
+                    perspiration: 'Perspiration & Odor Characteristics',
+                    miasmaticTendency: 'Miasmatic Diathesis / Background',
+                  };
+                  const label = labels[k] || k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ');
+                  return (
+                    <div key={k} className="bg-white/90 p-2.5 rounded-xl border border-cyan-200/80 shadow-xs">
+                      <span className="capitalize font-bold text-cyan-900 block text-[11px] mb-0.5">{label}</span>
+                      <span className="text-slate-800 font-medium">{v}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
