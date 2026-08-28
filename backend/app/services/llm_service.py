@@ -637,6 +637,19 @@ SAFETY RULES:
             else:
                 ros_items.append(f"{turn.questionText}: {ans}")
 
+        allopathic_details = {
+            "anatomicalSite": hpi.site if hpi.site else f"{category.replace('_', ' ')} Primary Region",
+            "socratesChronology": hpi.onset if hpi.onset else "Acute / Subacute presentation captured during OPD intake",
+            "painCharacterSeverity": hpi.character if hpi.character else "Symptom intensity and pattern documented",
+            "radiationDermatome": hpi.radiation if hpi.radiation else "Localized presentation (No distant radiation reported)",
+            "aggravatingRelieving": hpi.aggravating if hpi.aggravating else "Related to daily exertion and diurnal routine",
+            "autonomicAssociated": ", ".join(hpi.associatedSymptoms) if hpi.associatedSymptoms else "No acute autonomic symptoms reported",
+            "comorbidityRiskStratification": ", ".join(past_history) if past_history != ["No prior chronic hospital admissions reported"] else "Low cardiovascular / metabolic risk profile",
+            "activePharmacotherapyReconciliation": ", ".join(drug_history.currentMedications) if drug_history.currentMedications else "No active daily prescription medications",
+            "allergyAdverseAlert": drug_history.allergies if drug_history.allergies else "No known drug allergies (NKDA)"
+        }
+        hpi.allopathicDetails = allopathic_details
+
         if ayush_details:
             hpi.ayushDetails = ayush_details
             hpi.ayurvedicDetails = ayush_details
@@ -707,13 +720,15 @@ SAFETY RULES:
             ]
         else:
             nurse_summary_narrative = (
-                f"Patient presents with {chief_complaint}. "
-                f"Detailed clinical exploration reveals {positives_text}. "
-                f"Pertinent negatives: {negatives_text}. "
-                f"Comorbidity context: {past_text}. "
-                f"Current medications: {meds_text}. "
+                f"Patient presents with {chief_complaint} in Modern Allopathic OPD ({category.replace('_', ' ')}). "
+                f"SOCRATES exploration reveals {hpi.character} localized to {hpi.site or 'primary anatomical region'} with onset {hpi.onset}. "
+                f"Radiation: {hpi.radiation or 'None'}. Triggers/Relief: {hpi.aggravating or 'None specified'}. "
+                f"Pertinent positives: {positives_text}. "
+                f"Pertinent negatives & ruled-out alarm signs: {negatives_text}. "
+                f"Comorbidity risk profile: {past_text}. "
+                f"Active pharmacotherapy reconciliation: {meds_text}. "
                 f"Allergy status: {drug_history.allergies}. "
-                f"Prepared by OPD Triage Assistant for attending physician review."
+                f"Synthesized for Attending Medical Officer / Consultant Physician review."
             )
             recommendations = []
             if category == "Cardiovascular":

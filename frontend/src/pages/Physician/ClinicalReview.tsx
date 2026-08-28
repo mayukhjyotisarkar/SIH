@@ -779,6 +779,42 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
               </div>
             </div>
           )}
+
+          {/* Modern Allopathy SOCRATES Dossier Card */}
+          {(!session.ayushMode && !session.homeopathyMode && session.medicalSystem !== 'ayurveda' && session.medicalSystem !== 'homeopathy') && session.historyOfPresentIllness?.allopathicDetails && (
+            <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl border border-indigo-300 text-xs space-y-2.5 mt-3 shadow-sm">
+              <div className="flex items-center justify-between border-b border-indigo-200 pb-2">
+                <strong className="text-indigo-950 font-extrabold flex items-center gap-1.5 text-sm">
+                  <span>🩺 Modern Allopathic Clinical History &amp; SOCRATES Systems Dossier</span>
+                </strong>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-200/80 text-indigo-900 px-2 py-0.5 rounded-full border border-indigo-300">
+                  Allopathic EBM Protocol
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {Object.entries(session.historyOfPresentIllness.allopathicDetails).map(([k, v]) => {
+                  const labels: Record<string, string> = {
+                    anatomicalSite: 'Anatomical Site & Region (Site)',
+                    socratesChronology: 'Onset & Chronology (SOCRATES)',
+                    painCharacterSeverity: 'Character & Severity (NRS / Pattern)',
+                    radiationDermatome: 'Radiation & Dermatomal Path',
+                    aggravatingRelieving: 'Exacerbating & Relieving Factors',
+                    autonomicAssociated: 'Autonomic & Associated Symptoms',
+                    comorbidityRiskStratification: 'Comorbidity Risk Stratification',
+                    activePharmacotherapyReconciliation: 'Active Pharmacotherapy Reconciliation',
+                    allergyAdverseAlert: 'Allergy & Hypersensitivity Alert',
+                  };
+                  const label = labels[k] || k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ');
+                  return (
+                    <div key={k} className="bg-white/90 p-2.5 rounded-xl border border-indigo-200/80 shadow-xs">
+                      <span className="capitalize font-bold text-indigo-900 block text-[11px] mb-0.5">{label}</span>
+                      <span className="text-slate-800 font-medium">{v}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Section 3: Past Medical / Surgical History */}

@@ -124,6 +124,18 @@ export interface AyurvedicCaseDetails {
   ayurvedicMedicationsPathya?: string;
 }
 
+export interface AllopathicCaseDetails {
+  anatomicalSite?: string;
+  socratesChronology?: string;
+  painCharacterSeverity?: string;
+  radiationDermatome?: string;
+  aggravatingRelieving?: string;
+  autonomicAssociated?: string;
+  comorbidityRiskStratification?: string;
+  activePharmacotherapyReconciliation?: string;
+  allergyAdverseAlert?: string;
+}
+
 export interface HistoryOfPresentIllness {
   onset: string;
   site: string;
@@ -137,6 +149,7 @@ export interface HistoryOfPresentIllness {
   ayushDetails?: Record<string, string>;
   ayurvedicDetails?: Record<string, string>;
   homeopathicDetails?: Record<string, string>;
+  allopathicDetails?: Record<string, string>;
 }
 
 export interface DrugAllergyHistory {

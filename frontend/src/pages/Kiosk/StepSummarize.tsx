@@ -390,6 +390,35 @@ export const StepSummarize: React.FC<StepSummarizeProps> = ({
               </div>
             </div>
           )}
+
+          {/* Modern Allopathic EBM / SOCRATES Dossier if active or default allopathy */}
+          {(!session.ayushMode && !session.homeopathyMode && session.medicalSystem !== 'ayurveda' && session.medicalSystem !== 'homeopathy') && session.historyOfPresentIllness.allopathicDetails && (
+            <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-300 text-xs space-y-2 mt-2">
+              <strong className="text-indigo-950 font-bold block text-sm">🩺 Modern Allopathic Clinical History &amp; SOCRATES Systems Dossier:</strong>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {Object.entries(session.historyOfPresentIllness.allopathicDetails).map(([k, v]) => {
+                  const labels: Record<string, string> = {
+                    anatomicalSite: 'Anatomical Site & Region (Site)',
+                    socratesChronology: 'Onset & Chronology (SOCRATES)',
+                    painCharacterSeverity: 'Character & Severity (NRS / Pattern)',
+                    radiationDermatome: 'Radiation & Dermatomal Path',
+                    aggravatingRelieving: 'Exacerbating & Relieving Factors',
+                    autonomicAssociated: 'Autonomic & Associated Symptoms',
+                    comorbidityRiskStratification: 'Comorbidity Risk Stratification',
+                    activePharmacotherapyReconciliation: 'Active Pharmacotherapy Reconciliation',
+                    allergyAdverseAlert: 'Allergy & Hypersensitivity Alert',
+                  };
+                  const label = labels[k] || k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ');
+                  return (
+                    <div key={k} className="bg-white/80 p-2 rounded-lg border border-indigo-200">
+                      <span className="capitalize font-bold text-indigo-900 block text-[11px]">{label}: </span>
+                      <span className="text-slate-800 font-medium">{v}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 3. Past Medical & Drug History */}

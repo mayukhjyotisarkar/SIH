@@ -682,6 +682,70 @@ def test_ayurvedic_classical_intake_and_dossier_synthesis():
     assert any("Nadi Pariksha" in r or "Deepana-Pachana" in r for r in summary["nurseRecommendations"])
 
 
+def test_allopathic_ebm_socrates_synthesis():
+    """Verifies Modern Allopathic SOCRATES intake, structured allopathicDetails, and clinical summary."""
+    resp = client.post("/api/session/start", json={
+        "fullName": "Vikram Malhotra",
+        "age": 52,
+        "gender": "Male",
+        "language": "en",
+        "medicalSystem": "allopathy"
+    })
+    assert resp.status_code == 200
+    s_id = resp.json()["sessionId"]
+
+    # Turn 0: Chief complaint (Cardiovascular)
+    ans0 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Heavy retrosternal chest tightness with shortness of breath on climbing stairs",
+        "field": "chief_complaint",
+        "medicalSystem": "allopathy"
+    })
+    assert ans0.status_code == 200
+    q1 = ans0.json()["adaptive"]
+    assert q1["field"] == "vitals_baseline_common"
+
+    # Turn 1: Vitals
+    ans1 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "High BP (> 140/90), Weight ~75 kg, Height ~172 cm",
+        "field": q1["field"],
+        "questionText": q1["question"],
+        "medicalSystem": "allopathy"
+    })
+    q2 = ans1.json()["adaptive"]
+    assert q2["field"] == "pain_character"
+
+    # Turn 2: Pain character
+    ans2 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Heavy squeezing / Tight band pressure",
+        "field": q2["field"],
+        "questionText": q2["question"],
+        "medicalSystem": "allopathy"
+    })
+    q3 = ans2.json()["adaptive"]
+    assert q3["field"] == "radiation_site"
+
+    # Turn 3: Radiation
+    ans3 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Spreads to left arm and shoulder",
+        "field": q3["field"],
+        "questionText": q3["question"],
+        "medicalSystem": "allopathy"
+    })
+
+    # Verify Summary
+    sum_resp = client.get(f"/api/session/{s_id}/summary")
+    assert sum_resp.status_code == 200
+    data = sum_resp.json()
+    assert "Modern Allopathic OPD" in data["nurseSummary"] or "SOCRATES" in data["nurseSummary"]
+    hpi = data["historyOfPresentIllness"]
+    assert hpi["allopathicDetails"] is not None
+    assert "anatomicalSite" in hpi["allopathicDetails"]
+    assert "painCharacterSeverity" in hpi["allopathicDetails"]
+    assert len(data["nurseRecommendations"]) > 0
+    assert any("ECG" in r or "vitals" in r.lower() for r in data["nurseRecommendations"])
+
+
+
 
 
 

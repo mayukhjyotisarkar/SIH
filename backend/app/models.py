@@ -115,6 +115,17 @@ class AyurvedicCaseDetails(BaseModel):
     nidraManasika: Optional[str] = None # Sleep quality, Rajas/Tamas, Vega-dharana
     ayurvedicMedicationsPathya: Optional[str] = None # Current Kwatha/Churna/Bhasma & Pathya compliance
 
+class AllopathicCaseDetails(BaseModel):
+    anatomicalSite: Optional[str] = None # Precordium, Epigastrium, Right Lower Quadrant, etc.
+    socratesChronology: Optional[str] = None # Acute sudden, subacute, progressive
+    painCharacterSeverity: Optional[str] = None # Crushing pressure, stabbing, burning, colicky
+    radiationDermatome: Optional[str] = None # Left arm, jaw, scapula, flank, dermatomal
+    aggravatingRelieving: Optional[str] = None # Exertion, meals, posture, antacids, rest
+    autonomicAssociated: Optional[str] = None # Diaphoresis, dyspnea, nausea, palpitations
+    comorbidityRiskStratification: Optional[str] = None # HTN, T2DM, CAD, Dyslipidemia, Smoking
+    activePharmacotherapyReconciliation: Optional[str] = None # Reconciled daily prescription drugs
+    allergyAdverseAlert: Optional[str] = None # Documented drug allergy contraindications
+
 class HistoryOfPresentIllness(BaseModel):
     onset: str = ""
     site: str = ""
@@ -128,6 +139,7 @@ class HistoryOfPresentIllness(BaseModel):
     ayushDetails: Optional[Dict[str, str]] = None
     ayurvedicDetails: Optional[Dict[str, str]] = None
     homeopathicDetails: Optional[Dict[str, str]] = None
+    allopathicDetails: Optional[Dict[str, str]] = None
 
 class DrugAllergyHistory(BaseModel):
     currentMedications: List[str] = Field(default_factory=list)
