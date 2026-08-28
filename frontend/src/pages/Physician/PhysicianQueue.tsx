@@ -192,6 +192,7 @@ export const PhysicianQueue: React.FC<PhysicianQueueProps> = ({ onSelectPatient 
               <tr>
                 <th className="py-3.5 px-4">Token #</th>
                 <th className="py-3.5 px-4">Patient Name & Info</th>
+                <th className="py-3.5 px-4">ESI & NEWS2 Triage</th>
                 <th className="py-3.5 px-4">Assigned Department</th>
                 <th className="py-3.5 px-4">Chief Complaint & Red Flag</th>
                 <th className="py-3.5 px-4">Records</th>
@@ -202,7 +203,7 @@ export const PhysicianQueue: React.FC<PhysicianQueueProps> = ({ onSelectPatient 
             <tbody className="divide-y divide-slate-200">
               {filteredQueue.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={8} className="py-12 text-center text-slate-500 text-sm">
                     No patients currently waiting in this clinic filter.
                   </td>
                 </tr>
@@ -210,6 +211,10 @@ export const PhysicianQueue: React.FC<PhysicianQueueProps> = ({ onSelectPatient 
                 filteredQueue.map((pt) => {
                   const isRedFlag = pt.redFlag?.triggered;
                   const dept = pt.departmentRouting;
+                  const esi = pt.triageScore?.esiLevel || (isRedFlag ? 2 : 3);
+                  const esiCat = pt.triageScore?.esiCategory || (isRedFlag ? 'Emergent' : 'Urgent');
+                  const news2 = pt.triageScore?.news2Score || 0;
+
                   return (
                     <tr
                       key={pt.sessionId}
@@ -236,6 +241,26 @@ export const PhysicianQueue: React.FC<PhysicianQueueProps> = ({ onSelectPatient 
                             AYUSH OPD
                           </span>
                         )}
+                      </td>
+
+                      {/* ESI & NEWS2 Triage */}
+                      <td className="py-4 px-4">
+                        <div className="flex flex-col space-y-1">
+                          <span className={`inline-block text-[11px] font-extrabold px-2 py-0.5 rounded-md w-fit ${
+                            (esi === 1 || isRedFlag)
+                              ? 'bg-rose-600 text-white shadow-2xs'
+                              : esi === 2
+                              ? 'bg-orange-500 text-white shadow-2xs'
+                              : esi === 3
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-teal-100 text-teal-900'
+                          }`}>
+                            ESI {esi}: {esiCat}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500">
+                            NEWS2: <strong className="text-slate-800 font-bold">{news2}</strong>
+                          </span>
+                        </div>
                       </td>
 
                       {/* Assigned Department */}
@@ -274,7 +299,7 @@ export const PhysicianQueue: React.FC<PhysicianQueueProps> = ({ onSelectPatient 
                       <td className="py-4 px-4">
                         <span className="inline-flex items-center space-x-1 text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md">
                           <FileText className="w-3.5 h-3.5 text-slate-500" />
-                          <span>{pt.docCount} docs</span>
+                          <span>{pt.docCount || pt.priorInvestigations?.length || 0} docs</span>
                         </span>
                       </td>
 

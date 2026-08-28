@@ -278,6 +278,8 @@ class PatientSession(BaseModel):
     physicianNotes: Optional[str] = ""
     sectionReviews: Dict[str, Literal["accepted", "amended", "rejected"]] = Field(default_factory=dict)
     redFlag: RedFlag = Field(default_factory=RedFlag)
+    painAssessment: Optional["PainAssessment"] = None
+    triageScore: Optional["TriageAcuityScore"] = None
     staffCallActive: bool = False
     staffCallReason: Optional[str] = None
     timestamp: Optional[str] = ""
@@ -285,6 +287,97 @@ class PatientSession(BaseModel):
     updatedAt: Optional[str] = None
     status: Literal["in_progress", "scanned", "confirmed", "in_physician_review", "completed"] = "in_progress"
     version: int = 1
+
+# --- Pain Assessment & Body Map Models ---
+class PainAssessment(BaseModel):
+    anatomicalRegion: str = "Lower Back"
+    side: Optional[str] = "Bilateral"
+    painSeverityVAS: int = Field(default=5, ge=1, le=10)
+    painCharacter: str = "Dull / Aching"
+    radiationPath: Optional[str] = None
+    aggravatingFactors: Optional[str] = None
+    relievingFactors: Optional[str] = None
+    bodyCoordinates: Optional[Dict[str, float]] = None
+
+# --- Drug Interaction (DDI) & Safety Models ---
+class DrugInteractionAlert(BaseModel):
+    medication1: str
+    medication2: str
+    severity: Literal["high", "moderate", "minor", "herb_drug"] = "moderate"
+    interactionType: Literal["drug_drug", "herb_drug", "contraindication", "dosage_alert"] = "drug_drug"
+    mechanism: str
+    clinicalRecommendation: str
+
+class SafetyCheckResponse(BaseModel):
+    sessionId: str
+    hasHighRiskAlerts: bool = False
+    alerts: List[DrugInteractionAlert] = Field(default_factory=list)
+    allergyWarnings: List[str] = Field(default_factory=list)
+    contraindications: List[str] = Field(default_factory=list)
+    herbDrugInteractions: List[DrugInteractionAlert] = Field(default_factory=list)
+    ayurvedicPathyaApathya: Optional[List[str]] = Field(default_factory=list)
+
+# --- ESI Triage & NEWS2 Acuity Models ---
+class TriageAcuityScore(BaseModel):
+    esiLevel: int = Field(default=3, ge=1, le=5)
+    esiCategory: Literal["Resuscitation", "Emergent", "Urgent", "Less Urgent", "Non-Urgent"] = "Urgent"
+    news2Score: int = 0
+    news2Risk: Literal["Low", "Medium", "High", "Critical"] = "Low"
+    clinicalPriority: Literal["Immediate", "High Priority", "Routine", "Fast Track"] = "Routine"
+    rationale: str = ""
+    suggestedTargetTimeMinutes: int = 30
+
+# --- Prescription & OPD Referral Models ---
+class PrescriptionItem(BaseModel):
+    name: str
+    genericName: Optional[str] = None
+    dosage: str = "1 tablet"
+    frequency: str = "Twice daily"
+    timing: Optional[str] = "After meals"
+    duration: str = "5 days"
+    instructions: Optional[str] = "Take with water"
+
+class PrescriptionGenerateRequest(BaseModel):
+    hospitalName: Optional[str] = "Apollo / MediKiosk Smart Care Hospital"
+    doctorName: Optional[str] = None
+    doctorRegNo: Optional[str] = "MCI-48921"
+    doctorDepartment: Optional[str] = None
+    diagnoses: Optional[List[str]] = Field(default_factory=list)
+    icd10Codes: Optional[List[str]] = Field(default_factory=list)
+    medications: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    investigationsAdvised: Optional[List[str]] = Field(default_factory=list)
+    dietaryLifestyleAdvice: Optional[str] = None
+    followUpDays: Optional[int] = 14
+
+class PrescriptionOrder(BaseModel):
+    prescriptionId: str
+    sessionId: str
+    patientName: str
+    patientAge: int
+    patientGender: str
+    patientAbhaId: Optional[str] = None
+    hospitalName: str = "AIIMS / MediKiosk Smart Care Hospital"
+    doctorName: str = "Dr. Subhash Chandra, MD"
+    doctorRegNo: str = "MCI-48921"
+    doctorDepartment: str = "General Medicine & Endocrinology"
+    date: str
+    vitalsSummary: Optional[str] = None
+    diagnoses: List[str] = Field(default_factory=list)
+    icd10Codes: List[str] = Field(default_factory=list)
+    medications: List[PrescriptionItem] = Field(default_factory=list)
+    investigationsAdvised: List[str] = Field(default_factory=list)
+    dietaryLifestyleAdvice: Optional[str] = None
+    followUpDays: int = 14
+    qrVerificationUrl: str = ""
+
+# --- HL7 FHIR R4 Bundle Models ---
+class FHIRBundleResponse(BaseModel):
+    resourceType: str = "Bundle"
+    id: str
+    type: str = "document"
+    timestamp: str
+    entry: List[Dict[str, Any]] = Field(default_factory=list)
+    total: int = 0
 
 # --- Emergency Dashboard Models ---
 class EmergencyActionRequest(BaseModel):
@@ -368,4 +461,8 @@ class CDSSResponse(BaseModel):
     clinicalRationale: str = ""
     source: Literal["gemini", "groq", "openrouter", "guideline_rules"] = "guideline_rules"
     disclaimer: str = "AI Clinical Decision Support for doctor guidance only. Prescriptions and diagnoses are subject to attending physician's clinical discretion."
+
+# Rebuild models with forward references
+PatientSession.model_rebuild()
+
 

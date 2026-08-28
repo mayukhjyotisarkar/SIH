@@ -328,4 +328,52 @@ export class ApiService {
     });
     return this.handleResponse(res);
   }
+
+  // --- Advanced Clinical & Interoperability APIs ---
+  static async getSafetyCheck(sessionId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/session/${sessionId}/safety-check`);
+    return this.handleResponse(res);
+  }
+
+  static async checkStandaloneDDI(drugs: string[]): Promise<any> {
+    const res = await fetch(`${API_BASE}/clinical/ddi-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drugs })
+    });
+    return this.handleResponse(res);
+  }
+
+  static async savePainAssessment(sessionId: string, pain: any): Promise<any> {
+    const res = await fetch(`${API_BASE}/session/${sessionId}/pain-map`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pain)
+    });
+    return this.handleResponse(res);
+  }
+
+  static async getTriageScore(sessionId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/session/${sessionId}/triage`);
+    return this.handleResponse(res);
+  }
+
+  static async exportFHIRBundle(sessionId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/session/${sessionId}/fhir`);
+    return this.handleResponse(res);
+  }
+
+  static async generatePrescription(sessionId: string, prescriptionData: any): Promise<any> {
+    const res = await fetch(`${API_BASE}/session/${sessionId}/prescription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prescriptionData)
+    });
+    return this.handleResponse(res);
+  }
+
+  static async suggestDrugs(query: string): Promise<any[]> {
+    const res = await fetch(`${API_BASE}/clinical/drugs/suggest?q=${encodeURIComponent(query)}`);
+    return this.handleResponse<any[]>(res);
+  }
 }

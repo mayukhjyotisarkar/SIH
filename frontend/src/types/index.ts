@@ -309,10 +309,84 @@ export interface PatientSession {
   physicianNotes?: string;
   sectionReviews: Record<string, 'accepted' | 'amended' | 'rejected'>;
   conversationTurns: QAPair[];
+  painAssessment?: PainAssessment;
+  triageScore?: TriageAcuityScore;
   createdAt: string;
   updatedAt: string;
   status: 'in_progress' | 'scanned' | 'confirmed' | 'in_physician_review' | 'completed';
   version: number;
+}
+
+export interface PainAssessment {
+  anatomicalRegion: string;
+  side?: string;
+  painSeverityVAS: number;
+  painCharacter: string;
+  radiationPath?: string;
+  aggravatingFactors?: string;
+  relievingFactors?: string;
+  bodyCoordinates?: Record<string, number>;
+}
+
+export interface DrugInteractionAlert {
+  medication1: string;
+  medication2: string;
+  severity: 'high' | 'moderate' | 'minor' | 'herb_drug';
+  interactionType: 'drug_drug' | 'herb_drug' | 'contraindication' | 'dosage_alert';
+  mechanism: string;
+  clinicalRecommendation: string;
+}
+
+export interface SafetyCheckResponse {
+  sessionId: string;
+  hasHighRiskAlerts: boolean;
+  alerts: DrugInteractionAlert[];
+  allergyWarnings: string[];
+  contraindications: string[];
+  herbDrugInteractions: DrugInteractionAlert[];
+  ayurvedicPathyaApathya?: string[];
+}
+
+export interface TriageAcuityScore {
+  esiLevel: number;
+  esiCategory: 'Resuscitation' | 'Emergent' | 'Urgent' | 'Less Urgent' | 'Non-Urgent';
+  news2Score: number;
+  news2Risk: 'Low' | 'Medium' | 'High' | 'Critical';
+  clinicalPriority: 'Immediate' | 'High Priority' | 'Routine' | 'Fast Track';
+  rationale: string;
+  suggestedTargetTimeMinutes: number;
+}
+
+export interface PrescriptionItem {
+  name: string;
+  genericName?: string;
+  dosage: string;
+  frequency: string;
+  timing?: string;
+  duration: string;
+  instructions?: string;
+}
+
+export interface PrescriptionOrder {
+  prescriptionId: string;
+  sessionId: string;
+  patientName: string;
+  patientAge: number;
+  patientGender: string;
+  patientAbhaId?: string;
+  hospitalName: string;
+  doctorName: string;
+  doctorRegNo: string;
+  doctorDepartment: string;
+  date: string;
+  vitalsSummary?: string;
+  diagnoses: string[];
+  icd10Codes: string[];
+  medications: PrescriptionItem[];
+  investigationsAdvised: string[];
+  dietaryLifestyleAdvice?: string;
+  followUpDays: number;
+  qrVerificationUrl: string;
 }
 
 export interface StaffAccount {

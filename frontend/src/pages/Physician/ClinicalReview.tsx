@@ -5,12 +5,18 @@ import {
   CheckCircle2, FileText, User, Save, Building2, 
   ShieldCheck, AlertCircle, Stethoscope, Sparkles,
   Pill, FlaskConical, PlusCircle, CheckCheck, Lightbulb,
-  ChevronRight, RefreshCw, ShieldAlert, HeartPulse, Activity
+  ChevronRight, RefreshCw, ShieldAlert, HeartPulse, Activity,
+  Printer, Download, Share2, QrCode
 } from 'lucide-react';
-import { PatientSession, CDSSResponse, DifferentialDiagnosis, SuggestedDrug } from '../../types';
+import { 
+  PatientSession, CDSSResponse, DifferentialDiagnosis, SuggestedDrug,
+  SafetyCheckResponse, PrescriptionOrder 
+} from '../../types';
 import { ApiService } from '../../services/api';
 import { ProvenanceTag } from '../../components/ProvenanceTag';
 import { AbnormalBadge } from '../../components/AbnormalBadge';
+import { SafetyAlertsBadge } from '../../components/SafetyAlertsBadge';
+import { PrescriptionModal } from '../../components/PrescriptionModal';
 
 interface ClinicalReviewProps {
   sessionId?: string;
@@ -30,6 +36,15 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isSavedSuccess, setIsSavedSuccess] = useState<boolean>(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Safety DDI & Herb-Drug State
+  const [safetyData, setSafetyData] = useState<SafetyCheckResponse | null>(null);
+
+  // Prescription & FHIR Export State
+  const [prescriptionData, setPrescriptionData] = useState<PrescriptionOrder | null>(null);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState<boolean>(false);
+  const [isGeneratingRx, setIsGeneratingRx] = useState<boolean>(false);
+  const [isExportingFHIR, setIsExportingFHIR] = useState<boolean>(false);
 
   // CDSS State
   const [cdssData, setCdssData] = useState<CDSSResponse | null>(null);
@@ -86,6 +101,14 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
 
         // Automatically fetch AI Clinical Decision Support suggestions
         fetchCDSS(activeSessionId);
+
+        // Fetch Drug-Drug & Herb-Drug Safety Analysis
+        try {
+          const safety = await ApiService.getSafetyCheck(activeSessionId);
+          setSafetyData(safety);
+        } catch (sErr) {
+          console.warn("Safety check fetch failed:", sErr);
+        }
       } catch (err) {
         console.error("Fetch session detail error:", err);
       } finally {
@@ -162,6 +185,83 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
     setAdoptedItems(allKeys);
   };
 
+  const handleGeneratePrescription = async () => {
+    if (!session) return;
+    setIsGeneratingRx(true);
+    try {
+      // Gather medications from attached documents and CDSS adopted items
+      const meds: any[] = [];
+      session.priorInvestigations.forEach((doc) => {
+        if (doc.extracted?.medications) {
+          doc.extracted.medications.forEach((m: any) => {
+            meds.push({
+              name: m.name || 'Prescription Tablet',
+              dosage: m.dosage || '1 tablet',
+              frequency: m.frequency || 'Twice daily',
+              timing: m.instructions || 'After meals',
+              duration: m.duration || '30 days',
+              instructions: m.instructions || 'As advised'
+            });
+          });
+        }
+      });
+
+      // If CDSS suggested items were adopted, add them as well
+      if (cdssData?.suggestedTreatments) {
+        cdssData.suggestedTreatments.forEach((t) => {
+          if (adoptedItems[`rx_${t.name}`] || adoptedItems.all) {
+            meds.push({
+              name: t.name,
+              dosage: t.dosage,
+              frequency: t.frequency,
+              duration: t.duration,
+              instructions: t.rationale
+            });
+          }
+        });
+      }
+
+      const diagnoses = [
+        session.chiefComplaint || 'Clinical OPD Assessment',
+        ...(session.pastMedicalHistory.filter((p) => p.includes('Rx Diagnosis:')).map((p) => p.replace('Documented Rx Diagnosis: ', '')) || [])
+      ];
+
+      const res = await ApiService.generatePrescription(session.sessionId, {
+        medications: meds,
+        diagnoses,
+        icd10Codes: ['R69 (General Symptoms)', 'E11.9 (Type 2 Diabetes)'],
+        investigationsAdvised: cdssData?.recommendedInvestigations || ['Fasting Blood Sugar & Lipid Profile'],
+        dietaryLifestyleAdvice: 'Low salt, balanced diabetic diet. Regular exercise 30 mins daily.'
+      });
+
+      setPrescriptionData(res);
+      setShowPrescriptionModal(true);
+    } catch (err) {
+      console.error("Prescription generation error:", err);
+    } finally {
+      setIsGeneratingRx(false);
+    }
+  };
+
+  const handleExportFHIR = async () => {
+    if (!session) return;
+    setIsExportingFHIR(true);
+    try {
+      const bundle = await ApiService.exportFHIRBundle(session.sessionId);
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bundle, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `fhir-bundle-${session.sessionId}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err) {
+      console.error("FHIR export error:", err);
+    } finally {
+      setIsExportingFHIR(false);
+    }
+  };
+
   const handleFinalizeRecord = async () => {
     if (!session) return;
     setIsSaving(true);
@@ -201,7 +301,7 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       
       {/* Top Navigation & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <button
           onClick={handleBack}
           className="inline-flex items-center space-x-2 text-sm font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors w-fit"
@@ -210,7 +310,32 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
           <span>Back to Patient Queue</span>
         </button>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          
+          {/* 1-Click Generate Official Prescription */}
+          <button
+            type="button"
+            onClick={handleGeneratePrescription}
+            disabled={isGeneratingRx}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center space-x-1.5 min-h-[40px] cursor-pointer"
+            title="Generate official digital OPD prescription slip for printing or patient QR download"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{isGeneratingRx ? 'Generating Rx...' : 'Generate OPD Rx (Print/PDF)'}</span>
+          </button>
+
+          {/* Export HL7 FHIR R4 JSON */}
+          <button
+            type="button"
+            onClick={handleExportFHIR}
+            disabled={isExportingFHIR}
+            className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 min-h-[40px] cursor-pointer"
+            title="Export standard HL7 FHIR R4 Bundle JSON for hospital EHR ingestion"
+          >
+            <Download className="w-4 h-4 text-teal-600" />
+            <span>{isExportingFHIR ? 'Exporting...' : 'Export FHIR R4'}</span>
+          </button>
+
           <button
             onClick={handleSaveDraftReview}
             disabled={isSaving}
@@ -264,8 +389,8 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
         </span>
       </div>
 
-      {/* Patient Header Identity Card */}
-      <div className="bg-white rounded-2xl p-6 shadow-md border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+      {/* Patient Header Identity Card with ESI & NEWS2 Triage Acuity */}
+      <div className="bg-white rounded-2xl p-6 shadow-md border border-slate-200 grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
         <div>
           <span className="text-slate-400 font-semibold block">Patient Name</span>
           <strong className="text-base text-slate-900 font-bold">{session.patientName}</strong>
@@ -280,11 +405,35 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
         </div>
         <div>
           <span className="text-slate-400 font-semibold block">Token / Visit ID</span>
-          <strong className="text-sm font-mono text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+          <strong className="text-sm font-mono text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 block truncate">
             {session.tokenNumber} • {session.visitId}
           </strong>
         </div>
+        <div className="col-span-2 sm:col-span-1 bg-slate-50 p-2 rounded-xl border border-slate-200 flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">ESI Triage & NEWS2</span>
+          <div className="flex items-center space-x-1.5 mt-0.5">
+            <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md ${
+              (session.triageScore?.esiLevel === 1 || session.redFlag?.triggered)
+                ? 'bg-rose-600 text-white'
+                : session.triageScore?.esiLevel === 2
+                ? 'bg-orange-500 text-white'
+                : session.triageScore?.esiLevel === 3
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : 'bg-teal-100 text-teal-900'
+            }`}>
+              ESI {session.triageScore?.esiLevel || (session.redFlag?.triggered ? 2 : 3)}
+            </span>
+            <span className="text-[10px] font-mono font-bold text-slate-600">
+              NEWS2: {session.triageScore?.news2Score || 0}
+            </span>
+          </div>
+        </div>
       </div>
+
+      {/* Safety DDI & Herb-Drug Alerts Badge */}
+      {safetyData && (
+        <SafetyAlertsBadge safetyData={safetyData} />
+      )}
 
       {/* Baseline OPD Vitals Card */}
       <div className="bg-white rounded-2xl p-5 shadow-md border border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs">
@@ -1463,6 +1612,14 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Official OPD Electronic Prescription Modal */}
+      {showPrescriptionModal && prescriptionData && (
+        <PrescriptionModal
+          prescription={prescriptionData}
+          onClose={() => setShowPrescriptionModal(false)}
+        />
       )}
 
     </div>

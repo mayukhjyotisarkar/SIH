@@ -13,6 +13,7 @@ import {
 import { translations } from '../../utils/i18n';
 import { VITALS_I18N } from '../../utils/clinicalQuestionsI18n';
 import { AudioVisualizer } from '../../components/AudioVisualizer';
+import { BodyMapSelector } from '../../components/BodyMapSelector';
 import { playTextToSpeech, stopTextToSpeech } from '../../utils/sound';
 import { ApiService } from '../../services/api';
 
@@ -72,6 +73,9 @@ export const StepConverse: React.FC<StepConverseProps> = ({
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [customReasonText, setCustomReasonText] = useState<string>('');
   const [pendingOptionText, setPendingOptionText] = useState<string>('');
+  
+  // Interactive Body Pain Map State
+  const [showBodyMapModal, setShowBodyMapModal] = useState<boolean>(false);
   
   // Selected Accent / Dialect for Voice Input
   const [selectedAccent, setSelectedAccent] = useState<string>(() => {
@@ -297,6 +301,22 @@ export const StepConverse: React.FC<StepConverseProps> = ({
       currentQuestion.question
     );
     setTextInput('');
+  };
+
+  const handleSaveBodyPain = async (painData: any) => {
+    try {
+      await ApiService.savePainAssessment(session.sessionId, painData);
+      const painAnswer = `${painData.painCharacter} pain in ${painData.anatomicalRegion} (${painData.side || 'Bilateral'}) with severity VAS ${painData.painSeverityVAS}/10${painData.radiationPath ? `, radiating to ${painData.radiationPath}` : ''}`;
+      onAnswerSubmit(
+        painAnswer,
+        'tap',
+        session.ayushMode,
+        currentQuestion.field || 'chiefComplaint',
+        currentQuestion.question
+      );
+    } catch (err) {
+      console.error("Save pain map error:", err);
+    }
   };
 
   // Determine specialty category label
@@ -646,6 +666,31 @@ export const StepConverse: React.FC<StepConverseProps> = ({
 
           </div>
 
+          {/* Interactive Anatomical Body Map Trigger Bar */}
+          <div className="p-3 bg-gradient-to-r from-teal-50 to-indigo-50 border border-teal-200 rounded-2xl flex items-center justify-between flex-wrap gap-2 shadow-2xs">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                <Activity className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">
+                  Interactive Anatomical Pain Map
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Touch on body to localize pain site, VAS score (1-10) & radiation dermatome.
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowBodyMapModal(true)}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
+            >
+              <span>📌 Open Body Map</span>
+            </button>
+          </div>
+
           {/* Rapid Multiple Choice Touch Options */}
           <div className="space-y-2">
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -854,6 +899,15 @@ export const StepConverse: React.FC<StepConverseProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* Interactive Anatomical Body Pain Map Modal */}
+      {showBodyMapModal && (
+        <BodyMapSelector
+          initialPain={session.painAssessment}
+          onSavePain={handleSaveBodyPain}
+          onClose={() => setShowBodyMapModal(false)}
+        />
       )}
 
     </div>

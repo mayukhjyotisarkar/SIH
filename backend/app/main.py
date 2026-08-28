@@ -1,10 +1,10 @@
 import os
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Union
 from fastapi import (
     FastAPI, HTTPException, UploadFile, File, WebSocket, 
-    WebSocketDisconnect, Query, Header, Depends, status
+    WebSocketDisconnect, Query, Header, Depends, status, Body
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -21,7 +21,9 @@ from app.models import (
     DepartmentRouting, StaffCallRequest, DepartmentAssignmentRequest,
     CDSSResponse, EmergencyActionRequest, MedicationClarificationPlan,
     MedicationClarificationAnswerRequest, MedicationClarificationAnswerResponse,
-    ExtractedMedicationItem
+    ExtractedMedicationItem, PainAssessment, SafetyCheckResponse,
+    TriageAcuityScore, PrescriptionOrder, PrescriptionItem, FHIRBundleResponse,
+    PrescriptionGenerateRequest
 )
 from app.store import session_store
 from app.services.red_flag_service import red_flag_detector
@@ -31,6 +33,10 @@ from app.services.ocr_service import ocr_service, SAMPLE_DOCS_DIR, UPLOADS_DIR
 from app.services.staff_service import staff_service
 from app.services.audio_service import audio_service
 from app.services.medication_clarification_service import MedicationClarificationService
+from app.services.ddi_service import DDIService
+from app.services.triage_service import TriageService
+from app.services.fhir_service import FHIRService
+from app.services.drug_matching_service import DrugMatchingService
 
 # Ensure sample images exist on disk on startup
 ocr_service.ensure_sample_images_exist()
@@ -1010,13 +1016,28 @@ async def trigger_emergency_action(session_id: str, req: EmergencyActionRequest)
 @app.get("/api/physician/queue")
 async def get_physician_queue():
     """Returns patients ready for consultation, prioritized by triage severity."""
-    return session_store.get_physician_queue()
+    queue = session_store.get_physician_queue()
+    for s in queue:
+        score = TriageService.evaluate_triage_acuity(s)
+        if isinstance(s, dict):
+            s["triageScore"] = score.model_dump()
+        else:
+            s.triageScore = score
+    # Sort queue: ESI 1 first, then ESI 2, etc.
+    def _get_esi(item):
+        if isinstance(item, dict):
+            return item.get("triageScore", {}).get("esiLevel", 5)
+        return item.triageScore.esiLevel if getattr(item, "triageScore", None) else 5
+
+    queue.sort(key=_get_esi)
+    return queue
 
 @app.get("/api/physician/session/{session_id}")
 async def get_physician_session_detail(session_id: str):
     session = session_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    session.triageScore = TriageService.evaluate_triage_acuity(session)
     return session
 
 @app.post("/api/physician/session/{session_id}/review")
@@ -1051,6 +1072,7 @@ async def review_clinical_note(session_id: str, req: PhysicianSectionReviewReque
             session.fieldProvenance["reviewOfSystems"] = "physician-amended"
 
     session.status = "in_physician_review"
+    session.triageScore = TriageService.evaluate_triage_acuity(session)
     session_store.update_session(session_id, session)
 
     return {"status": "reviewed", "session": session}
@@ -1090,6 +1112,146 @@ async def finalize_physician_record(session_id: str):
         "tokenNumber": session.tokenNumber,
         "message": "Verified clinical note successfully committed to Hospital EHR and linked to ABHA PHR [SIMULATED]."
     }
+
+# --- ADVANCED CLINICAL SAFETY, TRIAGE & INTEROPERABILITY ENDPOINTS ---
+
+@app.get("/api/session/{session_id}/safety-check", response_model=SafetyCheckResponse)
+async def get_session_safety_check(session_id: str):
+    """
+    Evaluates Drug-Drug, Herb-Drug, and Clinical Contraindications for a patient session.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return DDIService.evaluate_session_safety(session)
+
+@app.post("/api/clinical/ddi-check")
+async def standalone_ddi_check(payload: Dict[str, Any] = Body(default_factory=dict)):
+    """
+    Checks pairwise DDI for an arbitrary list of drug names.
+    """
+    drugs = payload.get("drugs", [])
+    alerts = DDIService.check_drug_list(drugs)
+    return {"alerts": alerts, "count": len(alerts)}
+
+@app.get("/api/session/{session_id}/triage", response_model=TriageAcuityScore)
+async def get_session_triage_score(session_id: str):
+    """
+    Calculates ESI Triage Level (1-5) and NEWS2 Acuity score.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    score = TriageService.evaluate_triage_acuity(session)
+    session.triageScore = score
+    session_store.update_session(session_id, session)
+    return score
+
+@app.post("/api/session/{session_id}/pain-map")
+async def save_pain_assessment(session_id: str, pain: PainAssessment = Body(...)):
+    """
+    Saves interactive 2D anatomical pain map and VAS score to session.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.painAssessment = pain
+    
+    # Auto-enrich Chief Complaint / HPI if empty or generic
+    pain_desc = f"{pain.painCharacter} pain in {pain.anatomicalRegion} (VAS {pain.painSeverityVAS}/10)"
+    if pain.radiationPath:
+        pain_desc += f", radiating to {pain.radiationPath}"
+    
+    if not session.chiefComplaint or session.chiefComplaint == "Initial intake in progress":
+        session.chiefComplaint = pain_desc
+        session.fieldProvenance["chiefComplaint"] = "body-map-selector"
+
+    session.triageScore = TriageService.evaluate_triage_acuity(session)
+    session_store.update_session(session_id, session)
+
+    return {
+        "status": "pain_assessment_saved",
+        "painAssessment": session.painAssessment,
+        "triageScore": session.triageScore,
+        "session": session
+    }
+
+@app.get("/api/session/{session_id}/fhir")
+async def export_fhir_bundle(session_id: str):
+    """
+    Exports the complete patient intake dossier as an HL7 FHIR R4 Bundle JSON.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return FHIRService.generate_fhir_bundle(session)
+
+@app.post("/api/session/{session_id}/prescription", response_model=PrescriptionOrder)
+async def generate_prescription(session_id: str, prescription_data: Dict[str, Any] = Body(default_factory=dict)):
+    """
+    Creates and finalizes an official OPD digital prescription with verification QR code.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    rx_id = f"RX-{datetime.now().strftime('%Y%m%d')}-{session.tokenNumber}"
+    verification_url = f"https://hospital.medikiosk.in/verify/rx/{rx_id}"
+
+    vitals_summary = "BP: Normal | PR: Normal"
+    if session.vitals:
+        v = session.vitals
+        bp = getattr(v, "bloodPressure", None) or f"{getattr(v, 'bpSystolic', '--') or '--'}/{getattr(v, 'bpDiastolic', '--') or '--'} mmHg"
+        pr = getattr(v, "pulseBpm", None) or getattr(v, "pulseRate", "--") or "--"
+        temp = getattr(v, "temperatureF", None) or getattr(v, "temperatureC", "--") or "--"
+        vitals_summary = f"BP: {bp} | PR: {pr} | Temp: {temp}"
+
+    # Normalize medications
+    meds: List[PrescriptionItem] = []
+    raw_meds = prescription_data.get("medications", [])
+    for m in raw_meds:
+        if isinstance(m, dict):
+            meds.append(PrescriptionItem(
+                name=m.get("name", "Prescribed Tablet"),
+                genericName=m.get("genericName"),
+                dosage=m.get("dosage", "1 tablet"),
+                frequency=m.get("frequency", "Twice daily"),
+                timing=m.get("timing", "After food"),
+                duration=m.get("duration", "5 days"),
+                instructions=m.get("instructions", "As directed")
+            ))
+
+    order = PrescriptionOrder(
+        prescriptionId=rx_id,
+        sessionId=session.sessionId,
+        patientName=session.patientName,
+        patientAge=session.age,
+        patientGender=session.gender,
+        patientAbhaId=session.patientId if session.patientId.startswith("ABHA") else f"ABHA-91-{session.patientId[-6:]}",
+        hospitalName=prescription_data.get("hospitalName", "Apollo / MediKiosk Smart Care Hospital"),
+        doctorName=prescription_data.get("doctorName", (session.departmentRouting.doctorName if session.departmentRouting else "Dr. Subhash Chandra, MD")),
+        doctorRegNo=prescription_data.get("doctorRegNo", "MCI-48921"),
+        doctorDepartment=prescription_data.get("doctorDepartment", (session.departmentRouting.department if session.departmentRouting else "General Medicine")),
+        date=datetime.now().strftime("%Y-%m-%d"),
+        vitalsSummary=vitals_summary,
+        diagnoses=prescription_data.get("diagnoses", [session.chiefComplaint] if session.chiefComplaint else ["Clinical OPD Review"]),
+        icd10Codes=prescription_data.get("icd10Codes", ["R69 (General Symptoms)"]),
+        medications=meds,
+        investigationsAdvised=prescription_data.get("investigationsAdvised", ["Repeat Fasting Blood Sugar after 1 month"]),
+        dietaryLifestyleAdvice=prescription_data.get("dietaryLifestyleAdvice", "Low salt, balanced diabetic diet. Regular 30 min daily walking."),
+        followUpDays=int(prescription_data.get("followUpDays", 14)),
+        qrVerificationUrl=verification_url
+    )
+
+    return order
+
+@app.get("/api/clinical/drugs/suggest")
+async def suggest_drugs(q: str = Query("", description="Query prefix or phonetic spelling")):
+    """
+    Returns fuzzy drug auto-suggestions matching Indian CDSCO brands and generics.
+    """
+    return DrugMatchingService.search_drugs(q)
 
 # --- REAL-TIME WEBSOCKET FOR STAFF MONITORING ---
 

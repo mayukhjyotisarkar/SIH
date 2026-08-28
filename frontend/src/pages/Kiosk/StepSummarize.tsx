@@ -5,9 +5,11 @@ import {
   QrCode, Printer, Check, RotateCcw, AlertTriangle,
   Stethoscope, MapPin, User, BellRing
 } from 'lucide-react';
-import { LanguageCode, PatientSession } from '../../types';
+import { LanguageCode, PatientSession, SafetyCheckResponse } from '../../types';
 import { translations } from '../../utils/i18n';
 import { playTextToSpeech } from '../../utils/sound';
+import { SafetyAlertsBadge } from '../../components/SafetyAlertsBadge';
+import { ApiService } from '../../services/api';
 
 interface StepSummarizeProps {
   session: PatientSession;
@@ -29,8 +31,17 @@ export const StepSummarize: React.FC<StepSummarizeProps> = ({
   isConfirmed,
 }) => {
   const t = translations[currentLang] || translations.en;
-
   const routing = session.departmentRouting;
+
+  const [safetyData, setSafetyData] = useState<SafetyCheckResponse | null>(null);
+
+  React.useEffect(() => {
+    if (session.sessionId) {
+      ApiService.getSafetyCheck(session.sessionId)
+        .then(setSafetyData)
+        .catch((e) => console.warn("Safety check in summary failed:", e));
+    }
+  }, [session.sessionId]);
 
   const handlePlaySummary = () => {
     const summaryText = currentLang === 'hi'
@@ -264,6 +275,11 @@ export const StepSummarize: React.FC<StepSummarizeProps> = ({
               {session.nurseSummary}
             </p>
           </div>
+        )}
+
+        {/* Safety DDI & Herb-Drug Alerts */}
+        {safetyData && (
+          <SafetyAlertsBadge safetyData={safetyData} />
         )}
 
         {/* Assigned Department & Specialist Recommendation */}
