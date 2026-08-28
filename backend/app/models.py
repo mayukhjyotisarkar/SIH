@@ -131,6 +131,22 @@ class MedicationClarificationAnswerResponse(BaseModel):
     nextPlan: MedicationClarificationPlan
     allMedications: List[ExtractedMedicationItem] = Field(default_factory=list)
 
+class ConfidenceBreakdown(BaseModel):
+    imageQualityScore: float = 0.90
+    lexiconGroundingScore: float = 0.90
+    fieldCompletenessScore: float = 0.85
+    crossCheckAgreementScore: float = 0.90
+    reasons: List[str] = Field(default_factory=list)
+
+class CrossCheckDiscrepancy(BaseModel):
+    field: str
+    label: str
+    pass1Value: str
+    pass2Value: str
+    suggestedValue: str
+    confidenceDiff: float = 0.0
+    explanation: str = ""
+
 class PriorInvestigation(BaseModel):
     id: str
     document: str
@@ -139,6 +155,11 @@ class PriorInvestigation(BaseModel):
     medicationItems: Optional[List[ExtractedMedicationItem]] = None
     flag: Optional[str] = None
     confidence: float = 0.95
+    confidenceBreakdown: Optional[ConfidenceBreakdown] = None
+    crossCheckPassCount: int = 1
+    crossCheckStatus: Literal["single_pass", "dual_pass_verified", "discrepancy_flagged", "low_quality_alert"] = "single_pass"
+    crossCheckDiscrepancies: List[CrossCheckDiscrepancy] = Field(default_factory=list)
+    qualityAssessment: Literal["excellent", "good", "moderate", "poor_handwriting", "blurry_or_damaged"] = "good"
     isSample: bool = False
     timestamp: str
     imageUrl: Optional[str] = None

@@ -881,6 +881,61 @@ def test_delete_and_replace_erroneous_document():
     assert sum_after["priorInvestigations"][0]["documentType"] == "lab_report"
 
 
+def test_multi_document_attachment_and_dual_pass_crosscheck():
+    """
+    Verifies:
+    1. Patients can attach more than one document (multi-document support).
+    2. Cursive handwritten prescriptions report honest lower accuracy (not false high confidence).
+    3. Dual-pass cross-check evaluates the accuracy twice and returns confidence breakdown and crossCheckStatus.
+    """
+    # 1. Start Session
+    resp = client.post("/api/session/start", json={
+        "fullName": "Meera Banerjee",
+        "age": 44,
+        "gender": "Female",
+        "language": "en"
+    })
+    s_id = resp.json()["sessionId"]
+
+    # 2. Attach Document #1: Clean Lab Report
+    d1_res = client.post(f"/api/session/{s_id}/document/sample/sample_lab_report")
+    assert d1_res.status_code == 200
+    d1 = d1_res.json()
+    assert d1["confidence"] >= 0.85
+    assert d1["crossCheckPassCount"] == 2
+    assert d1["crossCheckStatus"] == "dual_pass_verified"
+    assert d1["confidenceBreakdown"] is not None
+    assert d1["confidenceBreakdown"]["imageQualityScore"] >= 0.90
+
+    # 3. Attach Document #2: Printed Rx
+    d2_res = client.post(f"/api/session/{s_id}/document/sample/sample_printed_rx")
+    assert d2_res.status_code == 200
+    d2 = d2_res.json()
+    assert d2["confidence"] >= 0.85
+    assert d2["crossCheckStatus"] == "dual_pass_verified"
+
+    # 4. Attach Document #3: Handwritten Rx (Cursive)
+    d3_res = client.post(f"/api/session/{s_id}/document/sample/sample_handwritten_rx")
+    assert d3_res.status_code == 200
+    d3 = d3_res.json()
+    # Honest low accuracy on cursive handwriting
+    assert d3["confidence"] <= 0.75
+    assert d3["qualityAssessment"] == "poor_handwriting"
+    assert d3["crossCheckStatus"] in ("low_quality_alert", "discrepancy_flagged")
+    assert d3["confidenceBreakdown"] is not None
+    assert d3["confidenceBreakdown"]["imageQualityScore"] <= 0.70
+
+    # 5. Verify session contains all 3 documents intact (multi-document capability)
+    sum_res = client.get(f"/api/session/{s_id}/summary")
+    assert sum_res.status_code == 200
+    session_data = sum_res.json()
+    assert len(session_data["priorInvestigations"]) == 3
+    doc_ids = [d["id"] for d in session_data["priorInvestigations"]]
+    assert d1["id"] in doc_ids
+    assert d2["id"] in doc_ids
+    assert d3["id"] in doc_ids
+
+
 
 
 

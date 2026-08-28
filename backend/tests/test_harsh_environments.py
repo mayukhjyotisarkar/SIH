@@ -339,3 +339,4 @@ class TestMedicalSystemSynthesizersHarshCases:
         assert sum_res.status_code == 200
         data = sum_res.json()
         assert data["historyOfPresentIllness"]["allopathicDetails"] is not None
+

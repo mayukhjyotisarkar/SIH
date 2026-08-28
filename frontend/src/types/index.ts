@@ -159,6 +159,24 @@ export interface ExtractedDocumentData {
   [key: string]: any;
 }
 
+export interface ConfidenceBreakdown {
+  imageQualityScore: number;
+  lexiconGroundingScore: number;
+  fieldCompletenessScore: number;
+  crossCheckAgreementScore: number;
+  reasons: string[];
+}
+
+export interface CrossCheckDiscrepancy {
+  field: string;
+  label: string;
+  pass1Value: string;
+  pass2Value: string;
+  suggestedValue: string;
+  confidenceDiff: number;
+  explanation: string;
+}
+
 export interface PriorInvestigation {
   id: string;
   document: string;
@@ -167,6 +185,11 @@ export interface PriorInvestigation {
   medicationItems?: ExtractedMedicationItem[];
   flag?: string | null;
   confidence: number;
+  confidenceBreakdown?: ConfidenceBreakdown;
+  crossCheckPassCount?: number;
+  crossCheckStatus?: 'single_pass' | 'dual_pass_verified' | 'discrepancy_flagged' | 'low_quality_alert';
+  crossCheckDiscrepancies?: CrossCheckDiscrepancy[];
+  qualityAssessment?: 'excellent' | 'good' | 'moderate' | 'poor_handwriting' | 'blurry_or_damaged';
   isSample: boolean;
   timestamp: string;
   imageUrl?: string;
