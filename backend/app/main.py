@@ -166,6 +166,8 @@ async def submit_answer(session_id: str, req: PatientAnswerRequest):
     session.nurseSummary = structured["nurseSummary"]
     session.pertinentPositives = structured["pertinentPositives"]
     session.pertinentNegatives = structured["pertinentNegatives"]
+    session.nurseRecommendations = structured.get("nurseRecommendations", [])
+    session.triageAcuity = structured.get("triageAcuity", "Routine")
     # 4. Determine Automated Department & Specialist Doctor Routing
     if session.fieldProvenance.get("departmentRouting") != "staff-manual":
         routing = routing_service.determine_routing(

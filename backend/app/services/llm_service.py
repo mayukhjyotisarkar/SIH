@@ -54,10 +54,24 @@ Output STRICT JSON ONLY.
 """
 
     SYSTEM_PROMPT_AYUSH = """
-You are the AYUSH / Ayurvedic OPD Triage Nurse AI engine for 'MediKiosk'.
-Conduct a comprehensive Ayurvedic intake using 'Dashavidha Pariksha' (Ten-fold Examination), Dosha assessment, Agni, Kostha, Ahara-Vihara and Manasika status.
-Ask exactly ONE clear question at a time with 3-4 options. Set `"done": true` once 6-7 comprehensive turns are gathered.
-Output STRICT JSON ONLY.
+You are the expert AYUSH / Ayurvedic OPD Triage AI Engine for 'MediKiosk' in an Indian Government AYUSH Hospital.
+Conduct a comprehensive, classical Ayurvedic clinical history intake adhering strictly to Charaka & Sushruta Samhita standards (Roga-Rogi Pariksha, Dashavidha Pariksha, and Ashtavidha Pariksha principles):
+
+AYURVEDIC CLINICAL PARIKSHA PROTOCOL:
+1. Roga Lakshana & Doshic Presentation: Assess specific Vataja (shifting throbbing pain, dryness, numbness, cold intolerance), Pittaja (burning sensation/Daha, sour reflux/Amlapitta, sweating, inflammation), or Kaphaja (heaviness/Gaurava, excessive mucus, sluggishness, swelling/Sotha) symptoms.
+2. Agni Pariksha (Jatharagni / Digestive Fire): Assess Mandagni (sluggish fire, heaviness after light meals), Tikshnagni (sharp burning hunger, hyperacidity), Vishamagni (fluctuating hunger, bloating, gas), vs Samagni (balanced on-time digestion).
+3. Kostha & Mala Pariksha (Bowel Nature & Evacuation): Krura Kostha (dry, hard, infrequent stools, constipation), Mrudu Kostha (soft, loose stools 2-3 times daily, sensitive to warm milk/ghee), Madhyama Kostha (formed regular morning evacuation), and Sama vs Nirama stool character.
+4. Ama & Srotorodha Lakshana (Metabolic Toxicity & Bio-Channel Obstruction): Presence of morning lethargy (Alasya), heavy coated tongue (Sama Jihva), bad breath, lack of taste (Aruchi), body stiffness upon waking.
+5. Ahara & Vihara Hetu (Dietetic & Lifestyle Causative Factors): Intake of Viruddha Ahara (incompatible combinations), Katu-Amla-Lavana (excessive spicy/sour/salty food), late-night meals (Ratri-bhojana), daytime sleeping (Divaswapna), night awakening (Ratrijagarana), or suppression of natural urges (Vega-dharana).
+6. Deha-Prakriti Assessment (Constitutional Phenotype): Vata-Pitta, Pitta-Kapha, Kapha-Vata, or Sannipataja constitutional traits, thermal preference (Sheeta vs Ushna Asahyata), skin texture, and stress temperament.
+7. Nidra & Manasika Status: Sleep quality (Anidra/disturbed vs Atinidra/heavy sleep), mental state (Satva, Rajas/anger-anxiety, Tamas/inertia).
+8. Current Ayurvedic Formulations (Kashayams, Churnas, Asava-Arishta, Guggulu, Rasayanas) & Modern Allopathic Medications, along with Pathya-Apathya (dietary restriction) compliance and herb allergies.
+
+RULES:
+- Ask EXACTLY ONE high-yield, classical Ayurvedic question in simple, patient-friendly language with bilingual Sanskrit/English clinical terms.
+- Provide 4 SHORT MULTIPLE-CHOICE OPTIONS (2-5 words each) representing standard Ayurvedic clinical findings.
+- Set `"done": true` once 7-8 thorough turns are gathered.
+- Output STRICT JSON ONLY.
 """
 
     SYSTEM_PROMPT_CDSS = """
@@ -243,14 +257,14 @@ SAFETY RULES:
 
         elif ayush_mode or medical_system == "ayurveda":
             flow = [
-                ("prakriti_assessment", "How would you describe your overall body type and tolerance to weather?", ["Lean / Dry skin / Dislikes cold (Vata)", "Medium build / Prone to heat / Sweats easily (Pitta)", "Heavy / Sturdy / Calm / Dislikes damp cold (Kapha)", "Mixed Prakriti"]),
-                ("agni_digestion", "How is your appetite, digestion speed, and hunger regularity?", ["Irregular & variable hunger (Vishamagni)", "Intense burning hunger & thirst (Tikshnagni)", "Sluggish / Heavy after meals (Mandagni)", "Smooth & balanced (Samagni)"]),
-                ("kostha_bowel", "How are your daily bowel movements and morning evacuation?", ["Hard stools / Tendency to constipation", "Loose / Frequent / Heat sensation", "Heavy sticky stools", "Regular and comfortable"]),
-                ("nidra_sleep", "How is your sleep quality and do you stay awake late at night?", ["Disturbed / Light sleep / Difficulty sleeping", "Sound sleep 6-7 hours", "Excessive daytime sleepiness / Heavy sleep", "Irregular sleep hours / Night shifts"]),
-                ("ahara_vihara", "What tastes do you crave and how is your daily mental stress level?", ["Sweet & warm foods / High mental stress", "Spicy, sour or cool foods / Moderate stress", "Pungent & bitter foods / Calm nature", "Balanced home diet / Low stress"]),
-                ("past_ayush_history", "Do you have any long-standing chronic illness like Diabetes or Joint issues?", ["Chronic Gastritis / Acidity (Amlapitta)", "Joint stiffness / Pain (Sandhivata)", "High Blood Pressure / Diabetes", "No prior chronic illnesses"]),
-                ("medications_ayush", "Are you currently taking any Ayurvedic, herbal, or regular Allopathic medicines?", ["Ayurvedic herbal formulations (Churnas/Kashayams)", "Regular BP / Sugar allopathic medicines", "Both Ayurvedic and Allopathic", "No medications currently"]),
-                ("allergies_dietary", "Do you have any food or drug allergies or adverse reactions?", ["Allergic to certain herbs / dairy", "Allergic to Allopathic antibiotics/painkillers", "No known allergies", "Strict vegetarian diet"])
+                ("dosha_lakshana", "What is the primary nature of your physical discomfort and Doshic manifestation?", ["Shifting piercing pain, dryness & stiffness (Vataja Lakshana)", "Burning sensation, intense heat & sour reflux (Pittaja Lakshana)", "Heavy sluggish body, coldness & mucus/swelling (Kaphaja Lakshana)", "Mixed pain and burning symptoms (Dwandwaja / Vata-Pitta)"]),
+                ("agni_digestion", "How is your digestive fire (Jatharagni), appetite strength, and food digestion speed?", ["Sluggish digestion & heavy belly after light food (Mandagni)", "Intense sharp burning hunger & excessive thirst (Tikshnagni)", "Unpredictable fluctuating hunger with gas/bloating (Vishamagni)", "Balanced healthy appetite digesting in 3-4 hours (Samagni)"]),
+                ("kostha_bowel", "What is the nature of your bowel evacuation and stool consistency (Kostha Pariksha)?", ["Hard dry stools with straining / Chronic constipation (Krura Kostha)", "Soft loose stools 2-3 times daily / Sensitive to warm milk (Mrudu Kostha)", "Regular smooth formed morning evacuation (Madhyama Kostha)", "Sticky foul-smelling stools that sink in water (Sama Mala)"]),
+                ("ama_srotorodha", "Do you feel morning heaviness, fatigue, or have a white-coated tongue (Ama Lakshana)?", ["Heavy coated tongue, morning fatigue & body heaviness (Sama / Ama present)", "Loss of taste (Aruchi) with sluggish heavy limbs (Alasya & Srotorodha)", "Fresh light body and clean pink tongue upon waking (Nirama / No Ama)", "Occasional morning heaviness clearing after warm water"]),
+                ("ahara_vihara_hetu", "What are your common dietary habits, food cravings, and daily routine (Ahara-Vihara Hetu)?", ["Frequently eat spicy, sour, fried or late-night food (Pitta-Vata Hetu)", "Heavy, sweet, cold or dairy-rich food / Day sleep (Kapha Hetu)", "Eat dry/raw foods with irregular meal timings (Vata Hetu)", "Fresh warm home-cooked balanced diet (Sattvic Ahara)"]),
+                ("prakriti_assessment", "How would you describe your natural lifelong body constitution & thermal tolerance (Prakriti)?", ["Lean frame / Dry skin / Intolerant to cold winds (Vata-Pitta Prakriti)", "Medium build / Warm body / Intolerant to sun & heat (Pitta-Kapha Prakriti)", "Broad sturdy frame / Cool smooth skin / Intolerant to damp cold (Kapha-Vata Prakriti)", "Balanced Tridosha constitution (Sama Prakriti)"]),
+                ("nidra_sleep", "How is your sleep pattern (Nidra) and do you tend to hold back natural urges (Vega-Dharana)?", ["Light disturbed sleep / Racing anxious thoughts (Vata-Rajas)", "Moderate sleep with vivid dreams / Waking hot or irritable (Pitta-Rajas)", "Heavy prolonged sleep / Daytime drowsiness (Kapha-Tamas)", "Sound refreshing 7-hour sleep / Regular natural urge release"]),
+                ("medications_ayush", "Are you taking any Ayurvedic formulations (Kashayam/Churna/Rasayana) or Allopathic medicines?", ["Taking Ayurvedic classical medicines (Kwathas / Churnas / Asavas)", "Taking regular Allopathic medicines for BP / Sugar / Thyroid", "Taking both Ayurvedic and Allopathic medicines", "No current medications / Following dietary guidelines (Pathya)"])
             ]
             flow_category = "AYUSH_Ayurveda"
 
@@ -559,13 +573,35 @@ SAFETY RULES:
                     drug_history.allergies = ans
                     pertinent_positives.append(f"Drug Allergy: {ans}")
             elif "prakriti" in f:
+                ayush_details["prakritiDeha"] = ans
                 ayush_details["prakriti"] = ans
+                pertinent_positives.append(f"Prakriti: {ans}")
             elif "agni" in f:
+                ayush_details["agniPariksha"] = ans
                 ayush_details["agni"] = ans
+                pertinent_positives.append(f"Jatharagni: {ans}")
             elif "kostha" in f:
+                ayush_details["kosthaMala"] = ans
                 ayush_details["kostha"] = ans
-            elif "nidra" in f:
+                pertinent_positives.append(f"Kostha: {ans}")
+            elif "ama" in f or "srotorodha" in f:
+                ayush_details["amaLakshana"] = ans
+                ayush_details["ama"] = ans
+                if "no ama" in ans_lower or "nirama" in ans_lower:
+                    pertinent_negatives.append(f"Ama Status: Nirama (No metabolic toxicity)")
+                else:
+                    pertinent_positives.append(f"Ama Status: {ans}")
+            elif "dosha" in f:
+                ayush_details["doshaLakshana"] = ans
+                ayush_details["dosha"] = ans
+                pertinent_positives.append(f"Doshic Manifestation: {ans}")
+            elif "ahara" in f or "vihara" in f or "hetu" in f:
+                ayush_details["aharaViharaHetu"] = ans
+                pertinent_positives.append(f"Ahara-Vihara: {ans}")
+            elif "nidra" in f or "manasika" in f:
+                ayush_details["nidraManasika"] = ans
                 ayush_details["nidra"] = ans
+                pertinent_positives.append(f"Nidra/Manasika: {ans}")
             elif "thermal" in f:
                 homeopathic_details["thermalState"] = ans
                 pertinent_positives.append(f"Thermal State: {ans}")
@@ -600,6 +636,7 @@ SAFETY RULES:
 
         if ayush_details:
             hpi.ayushDetails = ayush_details
+            hpi.ayurvedicDetails = ayush_details
         if homeopathic_details:
             hpi.homeopathicDetails = homeopathic_details
         hpi.clinicalRedFlagsChecked = red_flags_checked
@@ -617,30 +654,72 @@ SAFETY RULES:
         meds_text = ", ".join(drug_history.currentMedications) if drug_history.currentMedications else "no regular daily prescription tablets"
         past_text = ", ".join(past_history) if past_history != ["No prior chronic hospital admissions reported"] else "no major chronic illnesses"
 
-        nurse_summary_narrative = (
-            f"Patient presents with {chief_complaint}. "
-            f"Detailed clinical exploration reveals {positives_text}. "
-            f"Pertinent negatives: {negatives_text}. "
-            f"Comorbidity context: {past_text}. "
-            f"Current medications: {meds_text}. "
-            f"Allergy status: {drug_history.allergies}. "
-            f"Prepared by OPD Triage Assistant for attending physician review."
-        )
-
-        # Determine Nurse Recommendations based on Category
-        recommendations = []
-        if category == "Cardiovascular":
-            recommendations = ["Check 12-lead ECG stat", "Assess vitals & bilateral BP", "Review Lipid & Blood Glucose panel"]
-        elif category == "Gastrointestinal":
-            recommendations = ["Abdominal palpation for epigastric / RUQ tenderness", "Evaluate for H. pylori / Gastritis", "Advise dietary modification"]
-        elif category == "Respiratory":
-            recommendations = ["Check resting SpO2 & chest auscultation", "Assess for wheezing / bronchodilator response", "Consider Chest X-Ray if cough > 3 weeks"]
-        elif category == "Musculoskeletal":
-            recommendations = ["Inspect joint range of motion & crepitus", "Review standing knee / spinal X-Rays", "Check Serum Uric Acid if inflammatory"]
-        elif category == "Infectious_Fever":
-            recommendations = ["Record temperature & vitals", "Order Complete Blood Count (CBC) with Platelets", "Check Rapid Dengue / Malarial smear if indicated"]
-        elif category == "Endocrine_Metabolic":
-            recommendations = ["Check Fasting Blood Sugar & HbA1c", "Examine feet for sensory neuropathy / pulses", "Review current antidiabetic dosages"]
+        if ayush_mode or medical_system == "ayurveda" or "ayush" in category.lower():
+            dosha_val = ayush_details.get("doshaLakshana") or "Doshic imbalance present"
+            agni_val = ayush_details.get("agniPariksha") or "Agni assessment recorded"
+            kostha_val = ayush_details.get("kosthaMala") or "Kostha evaluated"
+            ama_val = ayush_details.get("amaLakshana") or "Ama status assessed"
+            prakriti_val = ayush_details.get("prakritiDeha") or ayush_details.get("prakriti") or "Mixed Prakriti"
+            hetu_val = ayush_details.get("aharaViharaHetu") or "Ahara-Vihara documented"
+            
+            nurse_summary_narrative = (
+                f"Patient presents with {chief_complaint} in AYUSH Ayurvedic OPD. "
+                f"Roga-Rogi & Dashavidha Pariksha reveals {dosha_val} with {agni_val} and {kostha_val}. "
+                f"Metabolic status: {ama_val}. "
+                f"Etiological inquiry (Ahara-Vihara Hetu): {hetu_val}. "
+                f"Deha-Prakriti: {prakriti_val}. "
+                f"Current Medications: {meds_text}. "
+                f"Prepared for Ayurvedic Medical Officer (Vaidya / BAMS) review."
+            )
+            recommendations = [
+                "Perform Nadi Pariksha & Jihva / Ashtavidha Pariksha clinical verification",
+                "Prescribe Deepana-Pachana Aushadhi for Ama pachana and Agni deepana",
+                "Advise Pathya-Apathya Ahara & Dinacharya (warm water, avoid Viruddha Ahara)",
+                "Evaluate for Sodhana Chikitsa (Panchakarma / Basti / Virechana) if chronic"
+            ]
+        elif homeopathy_mode or medical_system == "homeopathy":
+            thermal_val = homeopathic_details.get("thermalState") or "Thermal state recorded"
+            thirst_val = homeopathic_details.get("thirst") or "Thirst evaluated"
+            mind_val = homeopathic_details.get("mindGenerals") or "Mind generals documented"
+            modalities_val = homeopathic_details.get("modalitiesAggravation") or "Modalities assessed"
+            
+            nurse_summary_narrative = (
+                f"Patient presents with {chief_complaint} in Homeopathic OPD. "
+                f"Classical intake demonstrates {thermal_val} with {thirst_val}. "
+                f"Mind & Emotional Generals: {mind_val}. "
+                f"Key Modalities: {modalities_val}. "
+                f"Current Medications: {meds_text}. "
+                f"Prepared for Homeopathic Physician review."
+            )
+            recommendations = [
+                "Case repertorization based on totality of characteristic symptoms and modalities",
+                "Evaluate for single simillimum constitutional remedy in appropriate potency",
+                "Advise general dietary restrictions (avoid strong raw camphor/onion/coffee with remedies)",
+                "Schedule follow-up review after 2-4 weeks to assess symptom progression"
+            ]
+        else:
+            nurse_summary_narrative = (
+                f"Patient presents with {chief_complaint}. "
+                f"Detailed clinical exploration reveals {positives_text}. "
+                f"Pertinent negatives: {negatives_text}. "
+                f"Comorbidity context: {past_text}. "
+                f"Current medications: {meds_text}. "
+                f"Allergy status: {drug_history.allergies}. "
+                f"Prepared by OPD Triage Assistant for attending physician review."
+            )
+            recommendations = []
+            if category == "Cardiovascular":
+                recommendations = ["Check 12-lead ECG stat", "Assess vitals & bilateral BP", "Review Lipid & Blood Glucose panel"]
+            elif category == "Gastrointestinal":
+                recommendations = ["Abdominal palpation for epigastric / RUQ tenderness", "Evaluate for H. pylori / Gastritis", "Advise dietary modification"]
+            elif category == "Respiratory":
+                recommendations = ["Check resting SpO2 & chest auscultation", "Assess for wheezing / bronchodilator response", "Consider Chest X-Ray if cough > 3 weeks"]
+            elif category == "Musculoskeletal":
+                recommendations = ["Inspect joint range of motion & crepitus", "Review standing knee / spinal X-Rays", "Check Serum Uric Acid if inflammatory"]
+            elif category == "Infectious_Fever":
+                recommendations = ["Record temperature & vitals", "Order Complete Blood Count (CBC) with Platelets", "Check Rapid Dengue / Malarial smear if indicated"]
+            elif category == "Endocrine_Metabolic":
+                recommendations = ["Check Fasting Blood Sugar & HbA1c", "Examine feet for sensory neuropathy / pulses", "Review current antidiabetic dosages"]
         return {
             "chiefComplaint": chief_complaint,
             "historyOfPresentIllness": hpi,

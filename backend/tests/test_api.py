@@ -603,6 +603,84 @@ def test_homeopathy_system_intake_routing_and_cdss():
     assert len(cdss["suggestedTreatments"]) > 0
     assert any(d.get("potency") in ["30C", "200C", "1M"] for d in cdss["suggestedTreatments"])
 
+def test_ayurvedic_classical_intake_and_dossier_synthesis():
+    """Verifies authentic Ayurvedic CCIM/Ministry of Ayush intake protocol and clinical synthesis."""
+    resp = client.post("/api/session/start", json={
+        "fullName": "Dinesh Vaidya",
+        "age": 46,
+        "gender": "Male",
+        "language": "hi",
+        "ayushMode": True,
+        "medicalSystem": "ayurveda"
+    })
+    assert resp.status_code == 200
+    s_id = resp.json()["sessionId"]
+
+    # Turn 0: Submit chief complaint
+    cc_resp = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Severe chronic acidity, burning in stomach and knee joint stiffness (Amlapitta & Sandhivata)",
+        "field": "chief_complaint",
+        "medicalSystem": "ayurveda",
+        "ayushMode": True
+    })
+    assert cc_resp.status_code == 200
+    q1 = cc_resp.json()["adaptive"]
+    assert q1["field"] == "vitals_baseline_common"
+
+    # Turn 1: Vitals baseline
+    ans1 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Normal: Weight ~65 kg, Height ~168 cm, BP ~120/80 mmHg",
+        "field": q1["field"],
+        "questionText": q1["question"],
+        "medicalSystem": "ayurveda",
+        "ayushMode": True
+    })
+    q2 = ans1.json()["adaptive"]
+    assert q2["field"] == "dosha_lakshana"
+
+    # Turn 2: Doshic Manifestation answered
+    ans2 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Burning sensation, intense heat & sour reflux (Pittaja Lakshana)",
+        "field": q2["field"],
+        "questionText": q2["question"],
+        "medicalSystem": "ayurveda",
+        "ayushMode": True
+    })
+    q3 = ans2.json()["adaptive"]
+    assert q3["field"] == "agni_digestion"
+
+    # Turn 3: Jatharagni answered
+    ans3 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Intense sharp burning hunger & excessive thirst (Tikshnagni)",
+        "field": q3["field"],
+        "questionText": q3["question"],
+        "medicalSystem": "ayurveda",
+        "ayushMode": True
+    })
+    q4 = ans3.json()["adaptive"]
+    assert q4["field"] == "kostha_bowel"
+
+    # Turn 4: Kostha answered
+    ans4 = client.post(f"/api/session/{s_id}/answer", json={
+        "answer": "Hard dry stools with straining / Chronic constipation (Krura Kostha)",
+        "field": q4["field"],
+        "questionText": q4["question"],
+        "medicalSystem": "ayurveda",
+        "ayushMode": True
+    })
+    q5 = ans4.json()["adaptive"]
+    assert q5["field"] == "ama_srotorodha"
+
+    # Check summary synthesis
+    sum_resp = client.get(f"/api/session/{s_id}/summary")
+    assert sum_resp.status_code == 200
+    summary = sum_resp.json()
+    assert "AYUSH Ayurvedic OPD" in summary["nurseSummary"] or "Dashavidha Pariksha" in summary["nurseSummary"]
+    assert summary["historyOfPresentIllness"]["ayushDetails"] is not None
+    assert "doshaLakshana" in summary["historyOfPresentIllness"]["ayushDetails"]
+    assert len(summary["nurseRecommendations"]) > 0
+    assert any("Nadi Pariksha" in r or "Deepana-Pachana" in r for r in summary["nurseRecommendations"])
+
 
 
 

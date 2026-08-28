@@ -327,15 +327,37 @@ export const StepSummarize: React.FC<StepSummarizeProps> = ({
           </div>
 
           {/* AYUSH Details if active */}
-          {session.historyOfPresentIllness.ayushDetails && (
-            <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1.5 mt-2">
-              <strong className="text-amber-900 font-bold block">AYUSH Dashavidha Pariksha Details:</strong>
-              {Object.entries(session.historyOfPresentIllness.ayushDetails).map(([k, v]) => (
-                <div key={k}>
-                  <span className="capitalize font-semibold text-amber-800">{k.replace(/_/g, ' ')}: </span>
-                  <span className="text-slate-900">{v}</span>
-                </div>
-              ))}
+          {(session.historyOfPresentIllness.ayushDetails || session.historyOfPresentIllness.ayurvedicDetails) && (
+            <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-300 text-xs space-y-2 mt-2">
+              <strong className="text-amber-950 font-bold block text-sm">🌿 AYUSH Ayurveda Roga-Rogi &amp; Dashavidha Pariksha Summary:</strong>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {Object.entries(session.historyOfPresentIllness.ayurvedicDetails || session.historyOfPresentIllness.ayushDetails || {}).map(([k, v]) => {
+                  const labels: Record<string, string> = {
+                    doshaLakshana: 'Doshic Manifestation (Roga Lakshana)',
+                    dosha: 'Doshic Manifestation (Roga Lakshana)',
+                    agniPariksha: 'Jatharagni (Digestive Fire)',
+                    agni: 'Jatharagni (Digestive Fire)',
+                    kosthaMala: 'Kostha (Bowel Nature)',
+                    kostha: 'Kostha (Bowel Nature)',
+                    amaLakshana: 'Ama (Metabolic Toxicity)',
+                    ama: 'Ama (Metabolic Toxicity)',
+                    prakritiDeha: 'Deha-Prakriti (Constitution)',
+                    prakriti: 'Deha-Prakriti (Constitution)',
+                    aharaViharaHetu: 'Ahara-Vihara (Diet & Routine)',
+                    nidraManasika: 'Nidra & Manasika (Sleep & Mind)',
+                    nidra: 'Nidra & Manasika (Sleep & Mind)',
+                    ayurvedicMedicationsPathya: 'Ayurvedic Regimen & Pathya',
+                    pathya: 'Ayurvedic Regimen & Pathya',
+                  };
+                  const label = labels[k] || k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ');
+                  return (
+                    <div key={k} className="bg-white/80 p-2 rounded-lg border border-amber-200">
+                      <span className="capitalize font-bold text-amber-900 block text-[11px]">{label}: </span>
+                      <span className="text-slate-800 font-medium">{v}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

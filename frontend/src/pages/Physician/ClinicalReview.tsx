@@ -702,15 +702,44 @@ export const ClinicalReview: React.FC<ClinicalReviewProps> = ({
           )}
 
           {/* AYUSH Ayurveda Details if available */}
-          {session.historyOfPresentIllness?.ayushDetails && (
-            <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1 mt-2">
-              <strong className="text-amber-900 font-bold">🌿 AYUSH Ayurveda Dashavidha Pariksha Findings:</strong>
-              {Object.entries(session.historyOfPresentIllness.ayushDetails).map(([k, v]) => (
-                <div key={k}>
-                  <span className="capitalize font-semibold text-amber-800">{k.replace(/_/g, ' ')}: </span>
-                  <span className="text-slate-900">{v}</span>
-                </div>
-              ))}
+          {(session.historyOfPresentIllness?.ayushDetails || session.historyOfPresentIllness?.ayurvedicDetails) && (
+            <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-300 text-xs space-y-2.5 mt-3 shadow-sm">
+              <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                <strong className="text-amber-950 font-extrabold flex items-center gap-1.5 text-sm">
+                  <span>🌿 AYUSH Ayurveda Classical Roga-Rogi &amp; Dashavidha Pariksha Dossier</span>
+                </strong>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                  Ayurvedic OPD Protocol
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {Object.entries(session.historyOfPresentIllness.ayurvedicDetails || session.historyOfPresentIllness.ayushDetails || {}).map(([k, v]) => {
+                  const labels: Record<string, string> = {
+                    doshaLakshana: 'Doshic Manifestation (Roga Lakshana)',
+                    dosha: 'Doshic Manifestation (Roga Lakshana)',
+                    agniPariksha: 'Jatharagni Capacity (Digestive Fire)',
+                    agni: 'Jatharagni Capacity (Digestive Fire)',
+                    kosthaMala: 'Kostha & Bowel Evacuation (Bowel Nature)',
+                    kostha: 'Kostha & Bowel Evacuation (Bowel Nature)',
+                    amaLakshana: 'Ama & Srotorodha (Metabolic Toxicity)',
+                    ama: 'Ama & Srotorodha (Metabolic Toxicity)',
+                    prakritiDeha: 'Deha-Prakriti (Lifelong Constitution)',
+                    prakriti: 'Deha-Prakriti (Lifelong Constitution)',
+                    aharaViharaHetu: 'Ahara-Vihara Hetu (Diet & Lifestyle Routine)',
+                    nidraManasika: 'Nidra & Manasika (Sleep & Mental State)',
+                    nidra: 'Nidra & Manasika (Sleep & Mental State)',
+                    ayurvedicMedicationsPathya: 'Classical Formulations & Pathya Compliance',
+                    pathya: 'Classical Formulations & Pathya Compliance',
+                  };
+                  const label = labels[k] || k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ');
+                  return (
+                    <div key={k} className="bg-white/90 p-2.5 rounded-xl border border-amber-200/80 shadow-xs">
+                      <span className="capitalize font-bold text-amber-900 block text-[11px] mb-0.5">{label}</span>
+                      <span className="text-slate-800 font-medium">{v}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

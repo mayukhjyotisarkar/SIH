@@ -113,6 +113,17 @@ export interface PriorInvestigation {
   extractionSource?: 'vision_llm' | 'local_ocr_fallback' | 'sample_curated' | 'manual_correction';
 }
 
+export interface AyurvedicCaseDetails {
+  doshaLakshana?: string;
+  agniPariksha?: string;
+  kosthaMala?: string;
+  amaLakshana?: string;
+  prakritiDeha?: string;
+  aharaViharaHetu?: string;
+  nidraManasika?: string;
+  ayurvedicMedicationsPathya?: string;
+}
+
 export interface HistoryOfPresentIllness {
   onset: string;
   site: string;
@@ -124,6 +135,7 @@ export interface HistoryOfPresentIllness {
   symptomCategory?: string;
   clinicalRedFlagsChecked?: string[];
   ayushDetails?: Record<string, string>;
+  ayurvedicDetails?: Record<string, string>;
   homeopathicDetails?: Record<string, string>;
 }
 

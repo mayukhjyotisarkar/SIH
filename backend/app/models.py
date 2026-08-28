@@ -105,6 +105,16 @@ class HomeopathicCaseDetails(BaseModel):
     physicalGenerals: Optional[str] = None # Perspiration, appetite, sleep
     miasmaticTendency: Optional[str] = None # Psora / Sycosis / Syphilis / Tubercular
 
+class AyurvedicCaseDetails(BaseModel):
+    doshaLakshana: Optional[str] = None # Vataja / Pittaja / Kaphaja / Dwandwaja
+    agniPariksha: Optional[str] = None # Mandagni / Tikshnagni / Vishamagni / Samagni
+    kosthaMala: Optional[str] = None # Krura Kostha / Mrudu Kostha / Madhyama Kostha
+    amaLakshana: Optional[str] = None # Sama (Toxic/Coated) vs Nirama state
+    prakritiDeha: Optional[str] = None # Constitutional Prakriti & Thermal Guna
+    aharaViharaHetu: Optional[str] = None # Diet habits, Rasa cravings, Dinacharya
+    nidraManasika: Optional[str] = None # Sleep quality, Rajas/Tamas, Vega-dharana
+    ayurvedicMedicationsPathya: Optional[str] = None # Current Kwatha/Churna/Bhasma & Pathya compliance
+
 class HistoryOfPresentIllness(BaseModel):
     onset: str = ""
     site: str = ""
@@ -116,6 +126,7 @@ class HistoryOfPresentIllness(BaseModel):
     symptomCategory: Optional[str] = None
     clinicalRedFlagsChecked: Optional[List[str]] = Field(default_factory=list)
     ayushDetails: Optional[Dict[str, str]] = None
+    ayurvedicDetails: Optional[Dict[str, str]] = None
     homeopathicDetails: Optional[Dict[str, str]] = None
 
 class DrugAllergyHistory(BaseModel):
