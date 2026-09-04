@@ -211,6 +211,27 @@ class DoctorService:
         self._explicit_state[doctor_id] = True
         return self.get_duty(doctor_id)
 
+    def record_assignment(self, doctor_id: str, acuity_weight: float = 1.0) -> Optional[DoctorDutyStatus]:
+        """
+        Books a case against a doctor. acuityLoad is cumulative and weighted, so
+        fairness is measured in effort rather than headcount -- three crashes is
+        not the same shift as three sore throats.
+        """
+        duty = self._duty.get(doctor_id)
+        if duty is None:
+            return None
+        duty.activeCaseCount += 1
+        duty.acuityLoad = round(duty.acuityLoad + float(acuity_weight), 2)
+        return duty
+
+    def release_assignment(self, doctor_id: str) -> Optional[DoctorDutyStatus]:
+        """Closes a case. Cumulative acuityLoad is kept -- it is a shift total."""
+        duty = self._duty.get(doctor_id)
+        if duty is None:
+            return None
+        duty.activeCaseCount = max(0, duty.activeCaseCount - 1)
+        return duty
+
     def roster(self, now: Optional[datetime] = None) -> List[Dict]:
         """Full roster with live duty state, for the dispatcher and the portal."""
         out = []

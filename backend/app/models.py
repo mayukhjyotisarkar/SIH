@@ -470,6 +470,68 @@ class DoctorDutyUpdateRequest(BaseModel):
     dutyState: DutyState
     note: Optional[str] = ""
 
+# --- Emergency Dispatch Models ---
+# Emergency assignment is not "find a free doctor". It is meeting a clinical
+# deadline using a scarce, non-interchangeable, reusable resource, deciding now
+# without knowing what arrives next.
+class DispatchDeadline(BaseModel):
+    label: str                       # e.g. "Door-to-balloon"
+    targetMinutes: int
+    anchor: Literal["arrival", "onset"] = "arrival"
+    elapsedMinutes: int = 0          # already spent before dispatch
+    remainingMinutes: int = 0
+    breached: bool = False
+    basis: str = ""                  # how elapsed time was established
+
+class DispatchCandidate(BaseModel):
+    doctorId: str
+    fullName: str
+    title: str
+    department: str
+    roomNumber: str
+    dutyState: str
+    feasible: bool
+    exclusionReason: Optional[str] = None
+    travelMinutes: int = 0
+    projectedMinutesToDoctor: int = 0
+    meetsDeadline: bool = False
+    activeCaseCount: int = 0
+    acuityLoad: float = 0.0
+    scarcityPenalty: float = 0.0
+    score: float = 0.0               # lower is better
+    reasoning: List[str] = Field(default_factory=list)
+
+class DispatchProposal(BaseModel):
+    sessionId: str
+    condition: str
+    requiredPrivilege: str
+    preferredDepartment: str
+    acuityWeight: float
+    deadline: DispatchDeadline
+    proposed: Optional[DispatchCandidate] = None
+    alternatives: List[DispatchCandidate] = Field(default_factory=list)
+    excluded: List[DispatchCandidate] = Field(default_factory=list)
+    escalation: List[str] = Field(default_factory=list)
+    rationale: str = ""
+    requiresConfirmation: bool = True
+    generatedAt: str = ""
+
+class DispatchConfirmRequest(BaseModel):
+    doctorId: str
+    overrideReason: Optional[str] = None
+
+class DispatchAssignment(BaseModel):
+    sessionId: str
+    doctorId: str
+    doctorName: str
+    condition: str
+    confirmedByDoctorId: str
+    confirmedByName: str
+    wasProposed: bool = True         # False when the officer overrode the proposal
+    overrideReason: Optional[str] = None
+    rationale: str = ""
+    assignedAt: str = ""
+
 # --- Physician Review Models ---
 class PhysicianSectionReviewRequest(BaseModel):
     sectionReviews: Dict[str, Literal["accepted", "amended", "rejected"]]

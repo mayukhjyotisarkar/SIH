@@ -24,7 +24,8 @@ from app.models import (
     ExtractedMedicationItem, PainAssessment, SafetyCheckResponse,
     TriageAcuityScore, PrescriptionOrder, PrescriptionItem, FHIRBundleResponse,
     PrescriptionGenerateRequest, HistoryOfPresentIllness, DrugAllergyHistory,
-    DoctorAccount, DoctorLoginRequest, DoctorLoginResponse, DoctorDutyUpdateRequest
+    DoctorAccount, DoctorLoginRequest, DoctorLoginResponse, DoctorDutyUpdateRequest,
+    DispatchProposal, DispatchConfirmRequest, DispatchAssignment
 )
 from app.store import session_store
 from app.services.red_flag_service import red_flag_detector
@@ -33,6 +34,8 @@ from app.services.routing_service import routing_service
 from app.services.ocr_service import ocr_service, SAMPLE_DOCS_DIR, UPLOADS_DIR
 from app.services.staff_service import staff_service
 from app.services.doctor_service import doctor_service
+from app.services.dispatch_service import dispatch_service
+from app.services.dispatch_simulation import DispatchSimulation
 from app.services.audio_service import audio_service
 from app.services.medication_clarification_service import MedicationClarificationService
 from app.services.ddi_service import DDIService
@@ -899,6 +902,91 @@ async def get_available_doctors(
         privilege=privilege,
         include_interrupted=includeInterrupted
     )
+
+# --- EMERGENCY DISPATCH ENDPOINTS ---
+
+@app.get("/api/dispatch/session/{session_id}/proposal", response_model=DispatchProposal)
+async def get_dispatch_proposal(
+    session_id: str,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    Proposes which doctor should take this emergency, with the reasoning behind
+    it and the escalation ladder if the clinical deadline cannot be met.
+
+    This never assigns anyone. Unattended emergency assignment is not something
+    a rule engine should do alone -- a duty officer confirms via /confirm.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return dispatch_service.propose(session)
+
+@app.post("/api/dispatch/session/{session_id}/confirm", response_model=DispatchAssignment)
+async def confirm_dispatch(
+    session_id: str,
+    req: DispatchConfirmRequest,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    Duty officer confirms the assignment. Accepting a different doctor than the
+    one proposed is allowed and recorded as an override with its reason, so the
+    ledger shows what the policy advised and what a human actually decided.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    proposal = dispatch_service.propose(session)
+    try:
+        assignment = dispatch_service.confirm(
+            session=session,
+            proposal=proposal,
+            doctor_id=req.doctorId,
+            confirmed_by=doctor,
+            override_reason=req.overrideReason
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    entry = (
+        f"[{assignment.assignedAt}] Emergency assigned to {assignment.doctorName} "
+        f"for {assignment.condition}, confirmed by {assignment.confirmedByName}"
+    )
+    if not assignment.wasProposed:
+        entry += f" (OVERRIDE: {assignment.overrideReason or 'no reason given'})"
+    session.emergencyActionLog.append(entry)
+    session.fieldProvenance["dispatchAssignment"] = "doctor-confirmed"
+    session_store.update_session(session_id, session)
+
+    await staff_service.broadcast_event("emergency_dispatch_assigned", {
+        "sessionId": session_id,
+        "tokenNumber": session.tokenNumber,
+        "patientName": session.patientName,
+        "doctorId": assignment.doctorId,
+        "doctorName": assignment.doctorName,
+        "condition": assignment.condition,
+        "wasProposed": assignment.wasProposed,
+        "confirmedBy": assignment.confirmedByName
+    })
+    return assignment
+
+@app.get("/api/dispatch/benchmark")
+async def benchmark_dispatch_policies(
+    cases: int = Query(60, ge=10, le=500),
+    seed: int = Query(42),
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    Runs an identical stream of emergency arrivals through competing dispatch
+    policies so the deadline-aware policy can be compared against the obvious
+    alternatives rather than merely asserted. Deterministic for a given seed.
+    """
+    return {
+        "cases": cases,
+        "seed": seed,
+        "results": DispatchSimulation(seed=seed).compare(count=cases)
+    }
 
 @app.get("/api/staff/sessions")
 async def get_staff_sessions(staff: StaffAccount = Depends(get_current_staff)):
