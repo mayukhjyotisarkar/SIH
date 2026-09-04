@@ -149,6 +149,35 @@ def test_explicit_duty_state_is_cleared_at_shift_end():
     assert svc.get_duty(EMERGENCY_DOCTOR, noon).dutyState == "available"
 
 
+# --- Protected clinical routes -------------------------------------------
+
+PROTECTED_ROUTES = [
+    ("get", "/api/physician/queue"),
+    ("get", "/api/physician/session/session_seed_ramesh"),
+    ("post", "/api/physician/session/session_seed_ramesh/save-record"),
+    ("post", "/api/physician/session/session_seed_ramesh/clinical-decision-support"),
+    ("get", "/api/emergency/queue"),
+]
+
+
+@pytest.mark.parametrize("method,path", PROTECTED_ROUTES)
+def test_clinical_routes_reject_anonymous_callers(method, path):
+    """These routes expose identifiable clinical records; none may be public."""
+    assert getattr(client, method)(path).status_code == 401
+
+
+@pytest.mark.parametrize("method,path", PROTECTED_ROUTES)
+def test_clinical_routes_reject_forged_tokens(method, path):
+    res = getattr(client, method)(path, headers=_auth_header("doctok_forged"))
+    assert res.status_code == 401
+
+
+def test_clinical_routes_accept_a_signed_in_doctor():
+    token = _login()["token"]
+    res = client.get("/api/physician/queue", headers=_auth_header(token))
+    assert res.status_code == 200
+
+
 def test_candidates_filtered_by_privilege_and_department():
     svc = DoctorService()
     noon = datetime(2026, 9, 4, 12, 0)

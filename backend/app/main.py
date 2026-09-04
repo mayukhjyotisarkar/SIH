@@ -1056,7 +1056,7 @@ async def assign_patient_department(
 # --- EMERGENCY CASUALTY & RED FLAG TRIAGE ENDPOINTS ---
 
 @app.get("/api/emergency/queue")
-async def get_emergency_queue():
+async def get_emergency_queue(doctor: DoctorAccount = Depends(get_current_doctor)):
     """
     Dedicated stream of active red-flagged patients for Emergency Physicians & Casualty Staff.
     Filters exclusively for triggered emergency red flags.
@@ -1064,7 +1064,7 @@ async def get_emergency_queue():
     return session_store.get_emergency_queue()
 
 @app.post("/api/emergency/session/{session_id}/action")
-async def trigger_emergency_action(session_id: str, req: EmergencyActionRequest):
+async def trigger_emergency_action(session_id: str, req: EmergencyActionRequest, doctor: DoctorAccount = Depends(get_current_doctor)):
     """
     Executes rapid emergency actions (e.g. Bed assignment, Code Red dispatch, Stat Lab Orders).
     """
@@ -1103,7 +1103,7 @@ async def trigger_emergency_action(session_id: str, req: EmergencyActionRequest)
 # --- PHYSICIAN DASHBOARD ENDPOINTS ---
 
 @app.get("/api/physician/queue")
-async def get_physician_queue():
+async def get_physician_queue(doctor: DoctorAccount = Depends(get_current_doctor)):
     """Returns patients ready for consultation, prioritized by triage severity."""
     queue = session_store.get_physician_queue()
     for s in queue:
@@ -1122,7 +1122,7 @@ async def get_physician_queue():
     return queue
 
 @app.get("/api/physician/session/{session_id}")
-async def get_physician_session_detail(session_id: str):
+async def get_physician_session_detail(session_id: str, doctor: DoctorAccount = Depends(get_current_doctor)):
     session = session_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1130,7 +1130,7 @@ async def get_physician_session_detail(session_id: str):
     return session
 
 @app.post("/api/physician/session/{session_id}/review")
-async def review_clinical_note(session_id: str, req: PhysicianSectionReviewRequest):
+async def review_clinical_note(session_id: str, req: PhysicianSectionReviewRequest, doctor: DoctorAccount = Depends(get_current_doctor)):
     """
     Physician inline reviews each section with Accept / Amend / Reject controls.
     """
@@ -1168,7 +1168,7 @@ async def review_clinical_note(session_id: str, req: PhysicianSectionReviewReque
 
 @app.post("/api/physician/session/{session_id}/clinical-decision-support", response_model=CDSSResponse)
 @app.post("/api/physician/session/{session_id}/cdss", response_model=CDSSResponse)
-async def get_clinical_decision_support(session_id: str):
+async def get_clinical_decision_support(session_id: str, doctor: DoctorAccount = Depends(get_current_doctor)):
     """
     Generates evidence-based treatment options, differential diagnoses, critical points to notice,
     and recommended investigations to reduce physician stress and cognitive load during OPD review.
@@ -1182,7 +1182,7 @@ async def get_clinical_decision_support(session_id: str):
     return cdss_result
 
 @app.post("/api/physician/session/{session_id}/save-record")
-async def finalize_physician_record(session_id: str):
+async def finalize_physician_record(session_id: str, doctor: DoctorAccount = Depends(get_current_doctor)):
     """
     Doctor finalizes and commits the verified clinical record to the EHR.
     """

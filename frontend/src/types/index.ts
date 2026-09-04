@@ -397,6 +397,35 @@ export interface StaffAccount {
   department: string;
 }
 
+// Duty state is richer than free/busy: emergency dispatch needs to know whether
+// a doctor can be interrupted, not merely whether they are idle.
+export type DutyState = 'available' | 'on_rounds' | 'in_procedure' | 'off_duty';
+
+export interface DoctorAccount {
+  doctorId: string;
+  username: string;
+  fullName: string;
+  title: string;
+  department: string;
+  departmentCode: string;
+  registrationNumber: string;
+  privileges: string[];
+  roomNumber: string;
+  floorLocation: string;
+}
+
+export interface DoctorDutyStatus {
+  doctorId: string;
+  dutyState: DutyState;
+  onShift: boolean;
+  shiftStart: string;
+  shiftEnd: string;
+  onCall: boolean;
+  interruptible: boolean;
+  activeCaseCount: number;
+  acuityLoad: number;
+}
+
 export interface DifferentialDiagnosis {
   condition: string;
   icd10?: string;
