@@ -429,6 +429,47 @@ class ConnectivityUpdateRequest(BaseModel):
     failCount: int = 0
     clientTimestamp: str
 
+# --- Doctor Identity, Privileges & Duty Models ---
+# Duty state is deliberately richer than free/busy: emergency dispatch needs to
+# know whether a doctor can be interrupted, not merely whether they are idle.
+DutyState = Literal["available", "on_rounds", "in_procedure", "off_duty"]
+
+class DoctorAccount(BaseModel):
+    doctorId: str
+    username: str
+    fullName: str
+    title: str
+    department: str
+    departmentCode: str
+    registrationNumber: str          # NMC / state medical council registration
+    privileges: List[str] = Field(default_factory=list)
+    roomNumber: str = ""
+    floorLocation: str = ""
+
+class DoctorDutyStatus(BaseModel):
+    doctorId: str
+    dutyState: DutyState = "off_duty"
+    onShift: bool = False
+    shiftStart: str = ""             # "HH:MM" local hospital time
+    shiftEnd: str = ""
+    onCall: bool = False
+    interruptible: bool = True       # False while in_procedure
+    activeCaseCount: int = 0
+    acuityLoad: float = 0.0          # cumulative acuity-weighted load this shift
+
+class DoctorLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class DoctorLoginResponse(BaseModel):
+    token: str
+    doctor: DoctorAccount
+    duty: DoctorDutyStatus
+
+class DoctorDutyUpdateRequest(BaseModel):
+    dutyState: DutyState
+    note: Optional[str] = ""
+
 # --- Physician Review Models ---
 class PhysicianSectionReviewRequest(BaseModel):
     sectionReviews: Dict[str, Literal["accepted", "amended", "rejected"]]

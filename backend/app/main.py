@@ -23,7 +23,8 @@ from app.models import (
     MedicationClarificationAnswerRequest, MedicationClarificationAnswerResponse,
     ExtractedMedicationItem, PainAssessment, SafetyCheckResponse,
     TriageAcuityScore, PrescriptionOrder, PrescriptionItem, FHIRBundleResponse,
-    PrescriptionGenerateRequest, HistoryOfPresentIllness, DrugAllergyHistory
+    PrescriptionGenerateRequest, HistoryOfPresentIllness, DrugAllergyHistory,
+    DoctorAccount, DoctorLoginRequest, DoctorLoginResponse, DoctorDutyUpdateRequest
 )
 from app.store import session_store
 from app.services.red_flag_service import red_flag_detector
@@ -31,6 +32,7 @@ from app.services.llm_service import llm_service
 from app.services.routing_service import routing_service
 from app.services.ocr_service import ocr_service, SAMPLE_DOCS_DIR, UPLOADS_DIR
 from app.services.staff_service import staff_service
+from app.services.doctor_service import doctor_service
 from app.services.audio_service import audio_service
 from app.services.medication_clarification_service import MedicationClarificationService
 from app.services.ddi_service import DDIService
@@ -72,6 +74,22 @@ async def get_current_staff(authorization: Optional[str] = Header(None)) -> Staf
             detail="Invalid or expired staff token."
         )
     return staff
+
+# --- Doctor Auth Dependency ---
+async def get_current_doctor(authorization: Optional[str] = Header(None)) -> DoctorAccount:
+    """Verifies Bearer token for protected doctor routes."""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Doctor authentication token required. Please sign in."
+        )
+    doctor = doctor_service.verify_token(authorization)
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired doctor token."
+        )
+    return doctor
 
 # --- Health Check ---
 @app.get("/api/healthz")
@@ -810,6 +828,77 @@ async def staff_login(req: StaffLoginRequest):
         "token": token,
         "staff": account
     }
+
+# --- DOCTOR PORTAL ENDPOINTS ---
+
+@app.post("/api/doctor/login", response_model=DoctorLoginResponse)
+async def doctor_login(req: DoctorLoginRequest):
+    """Authenticates a registered doctor and returns their token and duty state."""
+    auth_result = doctor_service.authenticate(req.username, req.password)
+    if not auth_result:
+        raise HTTPException(status_code=401, detail="Invalid doctor username or password")
+    token, account = auth_result
+    return DoctorLoginResponse(
+        token=token,
+        doctor=account,
+        duty=doctor_service.get_duty(account.doctorId)
+    )
+
+@app.post("/api/doctor/logout")
+async def doctor_logout(authorization: Optional[str] = Header(None)):
+    """Invalidates the caller's doctor token."""
+    if authorization:
+        doctor_service.logout_token(authorization)
+    return {"status": "logged_out"}
+
+@app.get("/api/doctor/me")
+async def get_current_doctor_profile(doctor: DoctorAccount = Depends(get_current_doctor)):
+    """Returns the signed-in doctor's profile and live duty state."""
+    return {"doctor": doctor, "duty": doctor_service.get_duty(doctor.doctorId)}
+
+@app.post("/api/doctor/duty")
+async def update_doctor_duty(
+    req: DoctorDutyUpdateRequest,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    Doctor reports their own availability. 'in_procedure' marks them
+    uninterruptible, which emergency dispatch must respect.
+    """
+    duty = doctor_service.set_duty_state(doctor.doctorId, req.dutyState)
+    if duty is None:
+        raise HTTPException(status_code=404, detail="Duty record not found for this doctor")
+    await staff_service.broadcast_event("doctor_duty_changed", {
+        "doctorId": doctor.doctorId,
+        "fullName": doctor.fullName,
+        "department": doctor.department,
+        "dutyState": duty.dutyState,
+        "interruptible": duty.interruptible,
+        "note": req.note or ""
+    })
+    return {"status": "duty_updated", "duty": duty}
+
+@app.get("/api/doctor/roster")
+async def get_doctor_roster(doctor: DoctorAccount = Depends(get_current_doctor)):
+    """Full doctor roster with live shift and duty state."""
+    return doctor_service.roster()
+
+@app.get("/api/doctor/available")
+async def get_available_doctors(
+    department: Optional[str] = Query(None),
+    privilege: Optional[str] = Query(None),
+    includeInterrupted: bool = Query(False),
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    Assignment candidates: on shift and holding the required privilege.
+    Set includeInterrupted when no doctor is idle and a clinical deadline is close.
+    """
+    return doctor_service.available_doctors(
+        department=department,
+        privilege=privilege,
+        include_interrupted=includeInterrupted
+    )
 
 @app.get("/api/staff/sessions")
 async def get_staff_sessions(staff: StaffAccount = Depends(get_current_staff)):
