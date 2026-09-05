@@ -15,17 +15,22 @@ The policy is therefore built on four ideas:
    enough to finish, and never interrupting a procedure -- before any scoring.
 3. Remaining candidates are ranked on time-to-patient, current load and a
    scarcity reserve that holds rare privileges back from lower-acuity cases.
-4. Nothing is auto-assigned. The engine proposes with its reasoning and a duty
-   officer confirms, because unattended emergency assignment is not something a
-   rule engine should do alone.
+4. Assignment is automatic and the RECEIVING doctor accepts. There is no third
+   party approving each case: that would add latency to the most time-critical
+   path in the system, and an approval that is always granted launders
+   accountability rather than creating it. The doctor who accepts owns the case,
+   which is how clinical responsibility already works. A decline reassigns
+   immediately and its reason is kept -- "I am scrubbed in" is ground truth the
+   roster does not have. Human judgment is reserved for the exception path,
+   where the escalation ladder fires because the policy could not place the case.
 """
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models import (
-    DispatchCandidate, DispatchDeadline, DispatchProposal, DispatchAssignment,
-    DoctorAccount,
+    DispatchCandidate, DispatchDeadline, DispatchProposal,
+    DispatchOffer, DispatchRecord, DoctorAccount,
 )
 from app.services.doctor_service import doctor_service
 
@@ -404,7 +409,6 @@ class DispatchService:
             excluded=excluded,
             escalation=escalation,
             rationale=rationale,
-            requiresConfirmation=True,
             generatedAt=now.strftime("%H:%M:%S"),
         )
 
@@ -473,38 +477,194 @@ class DispatchService:
             tail += " Deadline is NOT met by any available doctor."
         return head + tail
 
-    # --- Confirmation ----------------------------------------------------
+    # --- Assignment ledger -----------------------------------------------
+    #
+    # Cases are assigned automatically and the receiving doctor accepts. A
+    # third party approving each assignment would add latency to the most
+    # time-critical path in the system, and an approval that is always granted
+    # launders accountability rather than creating it. The doctor who accepts
+    # owns the case, which is how clinical responsibility already works.
+
+    # Response window before the offer falls through to the next candidate.
+    URGENT_RESPONSE_SECONDS = 30       # acuity >= 4.5
+    STANDARD_RESPONSE_SECONDS = 60
+
+    _records: Dict[str, DispatchRecord] = {}
 
     @classmethod
-    def confirm(
-        cls,
-        session: Any,
-        proposal: DispatchProposal,
-        doctor_id: str,
-        confirmed_by: DoctorAccount,
-        override_reason: Optional[str] = None,
-        now: Optional[datetime] = None,
-    ) -> DispatchAssignment:
-        now = now or datetime.now()
-        assignee = doctor_service.get_doctor_by_id(doctor_id)
-        if assignee is None:
-            raise ValueError(f"Unknown doctor '{doctor_id}'")
+    def _response_window(cls, acuity: float) -> int:
+        return cls.URGENT_RESPONSE_SECONDS if acuity >= 4.5 else cls.STANDARD_RESPONSE_SECONDS
 
-        was_proposed = bool(proposal.proposed and proposal.proposed.doctorId == doctor_id)
-        doctor_service.record_assignment(doctor_id, proposal.acuityWeight)
-
-        return DispatchAssignment(
-            sessionId=proposal.sessionId,
-            doctorId=doctor_id,
-            doctorName=assignee.fullName,
-            condition=proposal.condition,
-            confirmedByDoctorId=confirmed_by.doctorId,
-            confirmedByName=confirmed_by.fullName,
-            wasProposed=was_proposed,
-            overrideReason=override_reason,
-            rationale=proposal.rationale,
-            assignedAt=now.strftime("%H:%M:%S"),
+    @classmethod
+    def _offer_to(
+        cls, record: DispatchRecord, candidate: DispatchCandidate, now: datetime
+    ) -> DispatchRecord:
+        record.currentOffer = DispatchOffer(
+            doctorId=candidate.doctorId,
+            doctorName=candidate.fullName,
+            offeredAt=now.isoformat(),
+            respondBySeconds=cls._response_window(record.acuityWeight),
+            reasoning=candidate.reasoning,
         )
+        record.status = "pending"
+        doctor_service.record_assignment(candidate.doctorId, record.acuityWeight)
+        return record
+
+    @classmethod
+    def _next_candidate(
+        cls, session: Any, record: DispatchRecord, now: datetime
+    ) -> Optional[DispatchCandidate]:
+        """
+        Re-runs the policy rather than replaying a stale ranking -- by the time
+        an offer is declined, shifts and loads have moved on. Doctors who have
+        already declined this case are not offered it again.
+        """
+        proposal = cls.propose(session, now)
+        for cand in ([proposal.proposed] if proposal.proposed else []) + proposal.alternatives:
+            if cand.doctorId not in record.declinedDoctorIds:
+                return cand
+        return None
+
+    @classmethod
+    def _escalate(cls, record: DispatchRecord, session: Any, now: datetime) -> DispatchRecord:
+        proposal = cls.propose(session, now)
+        record.status = "escalated"
+        record.currentOffer = None
+        ladder = list(proposal.escalation)
+        if record.declinedDoctorIds:
+            ladder.insert(0, (
+                f"{len(record.declinedDoctorIds)} doctor(s) declined or did not "
+                f"respond; no further candidate holds '{record.requiredPrivilege}'."
+            ))
+        elif not ladder:
+            ladder.append("No on-shift doctor could take this case.")
+        record.escalation = ladder
+        return record
+
+    @classmethod
+    def dispatch(cls, session: Any, now: Optional[datetime] = None) -> DispatchRecord:
+        """
+        Assigns the case automatically and offers it to the best candidate.
+        Idempotent: an existing record is swept for expiry and returned.
+        """
+        now = now or datetime.now()
+        session_id = getattr(session, "sessionId", "")
+        existing = cls._records.get(session_id)
+        if existing is not None:
+            return cls.sweep(session, now)
+
+        proposal = cls.propose(session, now)
+        record = DispatchRecord(
+            sessionId=session_id,
+            condition=proposal.condition,
+            requiredPrivilege=proposal.requiredPrivilege,
+            acuityWeight=proposal.acuityWeight,
+            deadline=proposal.deadline,
+            rationale=proposal.rationale,
+        )
+        cls._records[session_id] = record
+
+        if proposal.proposed is None:
+            return cls._escalate(record, session, now)
+        return cls._offer_to(record, proposal.proposed, now)
+
+    @classmethod
+    def sweep(cls, session: Any, now: Optional[datetime] = None) -> DispatchRecord:
+        """
+        Expires an unanswered offer and moves to the next candidate.
+
+        Expiry is evaluated lazily on read rather than by a background timer:
+        with no scheduler in the process, a record is only ever observed through
+        a read, so sweeping here gives the same result without a task loop.
+        """
+        now = now or datetime.now()
+        record = cls._records.get(getattr(session, "sessionId", ""))
+        if record is None or record.status != "pending" or record.currentOffer is None:
+            return record
+
+        offered_at = datetime.fromisoformat(record.currentOffer.offeredAt)
+        if (now - offered_at).total_seconds() < record.currentOffer.respondBySeconds:
+            return record
+
+        offer = record.currentOffer
+        offer.status = "expired"
+        offer.respondedAt = now.isoformat()
+        record.history.append(offer)
+        record.declinedDoctorIds.append(offer.doctorId)
+        doctor_service.release_assignment(offer.doctorId)
+
+        nxt = cls._next_candidate(session, record, now)
+        if nxt is None:
+            return cls._escalate(record, session, now)
+        return cls._offer_to(record, nxt, now)
+
+    @classmethod
+    def accept(cls, session: Any, doctor: DoctorAccount,
+               now: Optional[datetime] = None) -> DispatchRecord:
+        now = now or datetime.now()
+        record = cls.sweep(session, now)
+        if record is None:
+            raise ValueError("No dispatch record for this session")
+        if record.status == "accepted":
+            raise ValueError(f"Already accepted by {record.acceptedByName}")
+        if record.currentOffer is None or record.currentOffer.doctorId != doctor.doctorId:
+            raise PermissionError("This case is not currently offered to you")
+
+        offer = record.currentOffer
+        offer.status = "accepted"
+        offer.respondedAt = now.isoformat()
+        record.history.append(offer)
+        record.status = "accepted"
+        record.acceptedByDoctorId = doctor.doctorId
+        record.acceptedByName = doctor.fullName
+        record.acceptedAt = now.strftime("%H:%M:%S")
+        record.currentOffer = None
+        record.escalation = []
+        return record
+
+    @classmethod
+    def decline(cls, session: Any, doctor: DoctorAccount, reason: str,
+                now: Optional[datetime] = None) -> DispatchRecord:
+        now = now or datetime.now()
+        record = cls.sweep(session, now)
+        if record is None:
+            raise ValueError("No dispatch record for this session")
+        if record.status == "accepted":
+            raise ValueError(f"Already accepted by {record.acceptedByName}")
+        if record.currentOffer is None or record.currentOffer.doctorId != doctor.doctorId:
+            raise PermissionError("This case is not currently offered to you")
+
+        offer = record.currentOffer
+        offer.status = "declined"
+        offer.declineReason = reason
+        offer.respondedAt = now.isoformat()
+        record.history.append(offer)
+        record.declinedDoctorIds.append(doctor.doctorId)
+        # The doctor told us something the roster did not know; free them again.
+        doctor_service.release_assignment(doctor.doctorId)
+
+        nxt = cls._next_candidate(session, record, now)
+        if nxt is None:
+            return cls._escalate(record, session, now)
+        return cls._offer_to(record, nxt, now)
+
+    @classmethod
+    def record_for(cls, session_id: str) -> Optional[DispatchRecord]:
+        return cls._records.get(session_id)
+
+    @classmethod
+    def offers_for_doctor(cls, doctor_id: str) -> List[DispatchRecord]:
+        """Cases currently sitting on this doctor's screen awaiting a response."""
+        return [
+            r for r in cls._records.values()
+            if r.status == "pending" and r.currentOffer
+            and r.currentOffer.doctorId == doctor_id
+        ]
+
+    @classmethod
+    def reset(cls) -> None:
+        """Clears the ledger. Used by tests."""
+        cls._records = {}
 
 
 dispatch_service = DispatchService()

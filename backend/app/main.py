@@ -25,7 +25,7 @@ from app.models import (
     TriageAcuityScore, PrescriptionOrder, PrescriptionItem, FHIRBundleResponse,
     PrescriptionGenerateRequest, HistoryOfPresentIllness, DrugAllergyHistory,
     DoctorAccount, DoctorLoginRequest, DoctorLoginResponse, DoctorDutyUpdateRequest,
-    DispatchProposal, DispatchConfirmRequest, DispatchAssignment
+    DispatchProposal, DispatchRecord, DispatchDeclineRequest
 )
 from app.store import session_store
 from app.services.red_flag_service import red_flag_detector
@@ -922,54 +922,128 @@ async def get_dispatch_proposal(
         raise HTTPException(status_code=404, detail="Session not found")
     return dispatch_service.propose(session)
 
-@app.post("/api/dispatch/session/{session_id}/confirm", response_model=DispatchAssignment)
-async def confirm_dispatch(
-    session_id: str,
-    req: DispatchConfirmRequest,
-    doctor: DoctorAccount = Depends(get_current_doctor)
-):
-    """
-    Duty officer confirms the assignment. Accepting a different doctor than the
-    one proposed is allowed and recorded as an override with its reason, so the
-    ledger shows what the policy advised and what a human actually decided.
-    """
+def _require_session(session_id: str):
     session = session_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    return session
 
-    proposal = dispatch_service.propose(session)
-    try:
-        assignment = dispatch_service.confirm(
-            session=session,
-            proposal=proposal,
-            doctor_id=req.doctorId,
-            confirmed_by=doctor,
-            override_reason=req.overrideReason
+@app.post("/api/dispatch/session/{session_id}/dispatch", response_model=DispatchRecord)
+async def dispatch_emergency(
+    session_id: str,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    Assigns the case automatically and pages the best candidate. No third party
+    approves it: the receiving doctor accepts, and accountability sits with them.
+    Idempotent -- calling again returns the live record.
+    """
+    session = _require_session(session_id)
+    record = dispatch_service.dispatch(session)
+
+    if record.currentOffer:
+        session.emergencyActionLog.append(
+            f"[{datetime.now().strftime('%H:%M:%S')}] Auto-assigned to "
+            f"{record.currentOffer.doctorName} for {record.condition}, "
+            f"awaiting acceptance ({record.currentOffer.respondBySeconds}s)"
         )
+        session_store.update_session(session_id, session)
+        await staff_service.broadcast_event("emergency_dispatch_offered", {
+            "sessionId": session_id,
+            "tokenNumber": session.tokenNumber,
+            "patientName": session.patientName,
+            "doctorId": record.currentOffer.doctorId,
+            "doctorName": record.currentOffer.doctorName,
+            "condition": record.condition,
+            "respondBySeconds": record.currentOffer.respondBySeconds
+        })
+    return record
+
+@app.get("/api/dispatch/session/{session_id}", response_model=DispatchRecord)
+async def get_dispatch_record(
+    session_id: str,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """Live dispatch state. Unanswered offers expire on read and roll onward."""
+    session = _require_session(session_id)
+    record = dispatch_service.record_for(session_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No dispatch record for this session")
+    return dispatch_service.sweep(session)
+
+@app.post("/api/dispatch/session/{session_id}/accept", response_model=DispatchRecord)
+async def accept_dispatch(
+    session_id: str,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """The paged doctor takes the case, and owns it from here."""
+    session = _require_session(session_id)
+    try:
+        record = dispatch_service.accept(session, doctor)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
-    entry = (
-        f"[{assignment.assignedAt}] Emergency assigned to {assignment.doctorName} "
-        f"for {assignment.condition}, confirmed by {assignment.confirmedByName}"
+    session.emergencyActionLog.append(
+        f"[{record.acceptedAt}] {record.acceptedByName} accepted "
+        f"{record.condition}"
     )
-    if not assignment.wasProposed:
-        entry += f" (OVERRIDE: {assignment.overrideReason or 'no reason given'})"
-    session.emergencyActionLog.append(entry)
-    session.fieldProvenance["dispatchAssignment"] = "doctor-confirmed"
+    session.fieldProvenance["dispatchAssignment"] = "doctor-accepted"
     session_store.update_session(session_id, session)
 
-    await staff_service.broadcast_event("emergency_dispatch_assigned", {
+    await staff_service.broadcast_event("emergency_dispatch_accepted", {
         "sessionId": session_id,
         "tokenNumber": session.tokenNumber,
-        "patientName": session.patientName,
-        "doctorId": assignment.doctorId,
-        "doctorName": assignment.doctorName,
-        "condition": assignment.condition,
-        "wasProposed": assignment.wasProposed,
-        "confirmedBy": assignment.confirmedByName
+        "doctorId": record.acceptedByDoctorId,
+        "doctorName": record.acceptedByName,
+        "condition": record.condition
     })
-    return assignment
+    return record
+
+@app.post("/api/dispatch/session/{session_id}/decline", response_model=DispatchRecord)
+async def decline_dispatch(
+    session_id: str,
+    req: DispatchDeclineRequest,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    The paged doctor cannot take it. The case rolls straight to the next
+    candidate; the reason is kept because it is ground truth the roster lacks.
+    """
+    session = _require_session(session_id)
+    try:
+        record = dispatch_service.decline(session, doctor, req.reason)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    session.emergencyActionLog.append(
+        f"[{datetime.now().strftime('%H:%M:%S')}] {doctor.fullName} declined "
+        f"({req.reason})"
+    )
+    session_store.update_session(session_id, session)
+
+    await staff_service.broadcast_event("emergency_dispatch_declined", {
+        "sessionId": session_id,
+        "declinedBy": doctor.fullName,
+        "reason": req.reason,
+        "reofferedTo": record.currentOffer.doctorName if record.currentOffer else None,
+        "escalated": record.status == "escalated"
+    })
+    return record
+
+@app.get("/api/doctor/inbox")
+async def get_doctor_dispatch_inbox(
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """Emergency cases currently paged to the signed-in doctor."""
+    for record in list(dispatch_service._records.values()):
+        session = session_store.get_session(record.sessionId)
+        if session:
+            dispatch_service.sweep(session)
+    return dispatch_service.offers_for_doctor(doctor.doctorId)
 
 @app.get("/api/dispatch/benchmark")
 async def benchmark_dispatch_policies(

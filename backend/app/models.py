@@ -513,24 +513,39 @@ class DispatchProposal(BaseModel):
     excluded: List[DispatchCandidate] = Field(default_factory=list)
     escalation: List[str] = Field(default_factory=list)
     rationale: str = ""
-    requiresConfirmation: bool = True
     generatedAt: str = ""
 
-class DispatchConfirmRequest(BaseModel):
-    doctorId: str
-    overrideReason: Optional[str] = None
-
-class DispatchAssignment(BaseModel):
-    sessionId: str
+# Assignment is automatic; accountability comes from the receiving doctor
+# accepting, not from a third party approving. A decline reassigns immediately
+# and its reason is kept -- it is ground truth the roster does not have.
+class DispatchOffer(BaseModel):
     doctorId: str
     doctorName: str
+    offeredAt: str
+    respondBySeconds: int
+    status: Literal["pending", "accepted", "declined", "expired"] = "pending"
+    declineReason: Optional[str] = None
+    respondedAt: Optional[str] = None
+    reasoning: List[str] = Field(default_factory=list)
+
+class DispatchRecord(BaseModel):
+    sessionId: str
     condition: str
-    confirmedByDoctorId: str
-    confirmedByName: str
-    wasProposed: bool = True         # False when the officer overrode the proposal
-    overrideReason: Optional[str] = None
+    requiredPrivilege: str
+    acuityWeight: float = 3.0
+    deadline: Optional[DispatchDeadline] = None
+    status: Literal["pending", "accepted", "escalated"] = "pending"
+    currentOffer: Optional[DispatchOffer] = None
+    history: List[DispatchOffer] = Field(default_factory=list)
+    declinedDoctorIds: List[str] = Field(default_factory=list)
+    acceptedByDoctorId: Optional[str] = None
+    acceptedByName: Optional[str] = None
+    acceptedAt: Optional[str] = None
+    escalation: List[str] = Field(default_factory=list)
     rationale: str = ""
-    assignedAt: str = ""
+
+class DispatchDeclineRequest(BaseModel):
+    reason: str
 
 # --- Physician Review Models ---
 class PhysicianSectionReviewRequest(BaseModel):

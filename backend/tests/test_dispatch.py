@@ -5,7 +5,7 @@ Tests for deadline-aware emergency dispatch:
 - Hard constraints: privilege, shift, duty state, shift long enough to finish
 - Reserve policy holding scarce specialists back
 - Escalation ladder when no candidate meets the deadline
-- Confirmation, override recording, and route protection
+- Automatic assignment, accept/decline by the receiving doctor, route protection
 """
 from datetime import datetime
 
@@ -184,9 +184,12 @@ def test_met_deadline_produces_no_escalation():
     assert p.escalation == []
 
 
-def test_proposal_never_auto_assigns():
-    p = DispatchService.propose(make_session(STROKE, "1 hour ago"), AFTERNOON)
-    assert p.requiresConfirmation is True
+def test_proposal_is_a_dry_run_and_creates_no_assignment():
+    """/proposal previews the ranking; only /dispatch actually pages anyone."""
+    DispatchService.reset()
+    session = make_session(STROKE, "1 hour ago", session_id="preview-1")
+    DispatchService.propose(session, AFTERNOON)
+    assert DispatchService.record_for("preview-1") is None
 
 
 # --- Endpoints --------------------------------------------------------------
@@ -200,9 +203,12 @@ def _emergency_session_id() -> str:
 
 def test_dispatch_endpoints_require_authentication():
     sid = _emergency_session_id()
+    assert client.post(f"/api/dispatch/session/{sid}/dispatch").status_code == 401
     assert client.get(f"/api/dispatch/session/{sid}/proposal").status_code == 401
-    assert client.post(f"/api/dispatch/session/{sid}/confirm",
-                       json={"doctorId": "DOC-EMER-301"}).status_code == 401
+    assert client.post(f"/api/dispatch/session/{sid}/accept").status_code == 401
+    assert client.post(f"/api/dispatch/session/{sid}/decline",
+                       json={"reason": "busy"}).status_code == 401
+    assert client.get("/api/doctor/inbox").status_code == 401
     assert client.get("/api/dispatch/benchmark").status_code == 401
 
 
@@ -212,32 +218,168 @@ def test_proposal_endpoint_returns_reasoning():
     assert res.status_code == 200
     body = res.json()
     assert body["condition"]
-    assert body["requiresConfirmation"] is True
     assert body["deadline"]["targetMinutes"] > 0
     assert body["rationale"]
 
 
-def test_confirming_a_different_doctor_is_recorded_as_an_override():
+def test_dispatch_assigns_automatically_without_human_approval():
+    """No confirmation step: the case is paged the moment it is dispatched."""
+    DispatchService.reset()
     sid = _emergency_session_id()
-    headers = doctor_auth()
-    proposal = client.get(f"/api/dispatch/session/{sid}/proposal", headers=headers).json()
-    proposed_id = proposal["proposed"]["doctorId"] if proposal["proposed"] else None
-
-    other = "DOC-EMER-302" if proposed_id != "DOC-EMER-302" else "DOC-EMER-301"
-    res = client.post(f"/api/dispatch/session/{sid}/confirm", headers=headers,
-                      json={"doctorId": other, "overrideReason": "Already at the bedside"})
+    res = client.post(f"/api/dispatch/session/{sid}/dispatch", headers=doctor_auth())
     assert res.status_code == 200
     body = res.json()
-    assert body["wasProposed"] is False
-    assert body["overrideReason"] == "Already at the bedside"
-    assert body["confirmedByName"]
+    assert body["status"] == "pending"
+    assert body["currentOffer"] is not None
+    assert body["currentOffer"]["doctorId"]
+    assert body["currentOffer"]["respondBySeconds"] > 0
 
 
-def test_confirm_rejects_unknown_doctor():
+def test_dispatch_is_idempotent():
+    DispatchService.reset()
     sid = _emergency_session_id()
-    res = client.post(f"/api/dispatch/session/{sid}/confirm", headers=doctor_auth(),
-                      json={"doctorId": "DOC-DOES-NOT-EXIST"})
-    assert res.status_code == 404
+    headers = doctor_auth()
+    first = client.post(f"/api/dispatch/session/{sid}/dispatch", headers=headers).json()
+    second = client.post(f"/api/dispatch/session/{sid}/dispatch", headers=headers).json()
+    assert first["currentOffer"]["doctorId"] == second["currentOffer"]["doctorId"]
+
+
+def test_only_the_paged_doctor_may_accept():
+    DispatchService.reset()
+    sid = _emergency_session_id()
+    record = client.post(f"/api/dispatch/session/{sid}/dispatch",
+                         headers=doctor_auth()).json()
+    paged = record["currentOffer"]["doctorId"]
+
+    # Sign in as somebody who was not paged.
+    others = {"DOC-EMER-301": ("dr_iyer", "cardio456")}
+    username, password = others.get(paged, ("dr_khan", "emerg123"))
+    wrong = doctor_auth(username, password)
+    res = client.post(f"/api/dispatch/session/{sid}/accept", headers=wrong)
+    assert res.status_code == 409
+    assert "not currently offered" in res.json()["detail"].lower()
+
+
+# --- Ledger lifecycle (unit level, isolated roster) ------------------------
+
+def _stroke_session(sid="ledger-1"):
+    return make_session(STROKE, "1 hour ago", session_id=sid)
+
+
+def _isolated():
+    """Fresh roster + ledger so assignment state cannot leak between tests."""
+    import app.services.dispatch_service as mod
+    svc = DoctorService()
+    mod.doctor_service = svc
+    DispatchService.reset()
+    return svc, {d.doctorId: d for d in svc.doctors.values()}
+
+
+def test_decline_rolls_to_the_next_candidate_and_keeps_the_reason():
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    first = rec.currentOffer.doctorId
+
+    rec = DispatchService.decline(session, docs[first], "Scrubbed in", AFTERNOON)
+    assert rec.currentOffer is not None
+    assert rec.currentOffer.doctorId != first
+    assert first in rec.declinedDoctorIds
+    declined = [h for h in rec.history if h.status == "declined"]
+    assert declined[0].declineReason == "Scrubbed in"
+
+
+def test_a_doctor_who_declined_is_not_offered_the_case_again():
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    seen = []
+    for _ in range(3):
+        if rec.currentOffer is None:
+            break
+        did = rec.currentOffer.doctorId
+        seen.append(did)
+        rec = DispatchService.decline(session, docs[did], "unavailable", AFTERNOON)
+    assert len(seen) == len(set(seen)), f"case re-offered to a decliner: {seen}"
+
+
+def test_unanswered_offer_expires_and_rolls_onward():
+    from datetime import timedelta
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    first = rec.currentOffer.doctorId
+    window = rec.currentOffer.respondBySeconds
+
+    # Still inside the window: nothing moves.
+    same = DispatchService.sweep(session, AFTERNOON + timedelta(seconds=window - 1))
+    assert same.currentOffer.doctorId == first
+
+    later = DispatchService.sweep(session, AFTERNOON + timedelta(seconds=window + 1))
+    assert later.currentOffer is None or later.currentOffer.doctorId != first
+    assert any(h.status == "expired" for h in later.history)
+
+
+def test_accept_locks_the_case_to_that_doctor():
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    paged = rec.currentOffer.doctorId
+
+    rec = DispatchService.accept(session, docs[paged], AFTERNOON)
+    assert rec.status == "accepted"
+    assert rec.acceptedByDoctorId == paged
+    assert rec.currentOffer is None
+
+    with pytest.raises(ValueError):
+        DispatchService.accept(session, docs[paged], AFTERNOON)
+
+
+def test_a_doctor_cannot_accept_a_case_offered_to_someone_else():
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    paged = rec.currentOffer.doctorId
+    other = next(d for d in docs if d != paged)
+    with pytest.raises(PermissionError):
+        DispatchService.accept(session, docs[other], AFTERNOON)
+
+
+def test_exhausting_every_candidate_escalates_rather_than_stalling():
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    for _ in range(len(docs) + 1):
+        if rec.currentOffer is None:
+            break
+        rec = DispatchService.decline(session, docs[rec.currentOffer.doctorId],
+                                      "unavailable", AFTERNOON)
+    assert rec.status == "escalated"
+    assert rec.currentOffer is None
+    assert rec.escalation, "an exhausted ledger must not resolve silently"
+
+
+def test_declining_frees_the_doctor_again():
+    """A decline is information the roster lacked; the load booked must come back off."""
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    paged = rec.currentOffer.doctorId
+    assert svc.get_duty(paged, AFTERNOON).activeCaseCount == 1
+
+    DispatchService.decline(session, docs[paged], "at another crash", AFTERNOON)
+    assert svc.get_duty(paged, AFTERNOON).activeCaseCount == 0
+
+
+def test_inbox_shows_only_cases_paged_to_that_doctor():
+    svc, docs = _isolated()
+    session = _stroke_session()
+    rec = DispatchService.dispatch(session, AFTERNOON)
+    paged = rec.currentOffer.doctorId
+
+    assert len(DispatchService.offers_for_doctor(paged)) == 1
+    other = next(d for d in docs if d != paged)
+    assert DispatchService.offers_for_doctor(other) == []
 
 
 # --- Benchmark --------------------------------------------------------------
