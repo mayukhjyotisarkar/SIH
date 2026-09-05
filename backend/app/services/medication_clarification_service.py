@@ -251,6 +251,30 @@ class MedicationClarificationService:
             if len(unreliable) > 0:
                 status = "needs_clarification"
 
+            # Ground the reading against the formulary. A name the vision model
+            # produced confidently may still not be a marketed product, and a
+            # brand-only reading is invisible to the DDI rules until it carries
+            # its generic.
+            from app.services.formulary_service import formulary_service
+            check = formulary_service.verify(name, strength or dosage or "")
+            if check.status == "unverified":
+                # Not a known product: downgrade rather than present it as read.
+                if status == "reliable":
+                    status = "needs_clarification"
+                if "medicine" not in unreliable:
+                    unreliable.append("medicine")
+                confidence.medicine = min(confidence.medicine, 0.45)
+                confidence.overall = min(confidence.overall, 0.55)
+            elif check.strengthKnown is False:
+                # Name is real but the dose is not marketed -- a dosing error is
+                # more dangerous than a misread name.
+                if status == "reliable":
+                    status = "needs_clarification"
+                if "strength" not in unreliable:
+                    unreliable.append("strength")
+                confidence.strength = min(confidence.strength, 0.40)
+                confidence.overall = min(confidence.overall, 0.60)
+
             items.append(ExtractedMedicationItem(
                 id=m_id,
                 name=name,
@@ -264,7 +288,14 @@ class MedicationClarificationService:
                 confidence=confidence,
                 status=status,
                 unreliableFields=unreliable,
-                cropUrl=None
+                cropUrl=None,
+                verificationStatus=check.status,
+                matchedBrand=check.matchedBrand,
+                genericName=check.generic,
+                drugClass=check.drugClass,
+                strengthPlausible=check.strengthKnown,
+                formularyCandidates=check.candidates,
+                verificationNotes=check.notes,
             ))
 
         return items

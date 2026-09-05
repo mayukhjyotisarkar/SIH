@@ -138,6 +138,21 @@ def report(doc):
             print(f"      confidence {_pct(overall)}   status: {status}{mark}")
             if m.get("unreliableFields"):
                 print(f"      low-confidence fields: {', '.join(m['unreliableFields'])}")
+
+            # Formulary grounding: is this a real product, at a real dose?
+            vstatus = m.get("verificationStatus")
+            if vstatus and vstatus != "not_checked":
+                badge = {"verified": "[OK]", "corrected": "[FIXED]",
+                         "unverified": "[UNKNOWN]"}.get(vstatus, "")
+                generic = m.get("genericName")
+                line = f"      {badge} formulary: {vstatus}"
+                if generic:
+                    line += f" -> {m.get('matchedBrand')} ({generic})"
+                print(line)
+                if m.get("strengthPlausible") is False:
+                    print("      [!] strength is not a marketed dose for this product")
+                for note in (m.get("verificationNotes") or []):
+                    print(f"          {note}")
             print()
 
     extracted = doc.get("extracted") or {}

@@ -101,6 +101,15 @@ class ExtractedMedicationItem(BaseModel):
     status: Literal["reliable", "needs_clarification", "uncertain", "verified_by_patient", "escalated_to_staff"] = "reliable"
     unreliableFields: List[str] = Field(default_factory=list)
     cropUrl: Optional[str] = None
+    # Formulary grounding: whether this reading corresponds to a real marketed
+    # product, and the generic the DDI rules need in order to see it at all.
+    verificationStatus: Literal["verified", "corrected", "unverified", "not_checked"] = "not_checked"
+    matchedBrand: Optional[str] = None
+    genericName: Optional[str] = None
+    drugClass: Optional[str] = None
+    strengthPlausible: Optional[bool] = None
+    formularyCandidates: List[str] = Field(default_factory=list)
+    verificationNotes: List[str] = Field(default_factory=list)
 
 class MedicationClarificationPlan(BaseModel):
     shouldAskPatient: bool = False

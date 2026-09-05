@@ -11,16 +11,38 @@ was making real API calls.
 Outbound model calls are therefore disabled by default. A test that genuinely
 wants live behaviour can opt in with @pytest.mark.live_llm.
 """
+from datetime import datetime
+
 import pytest
 
+from app.services import clock
 from app.services.llm_service import LLMService
 from app.services.ocr_service import OCRService
+
+# Wednesday 15:00. Chosen so the seeded roster has several doctors on shift with
+# overlapping privileges -- the interesting case for dispatch. Without freezing,
+# any test reaching the API through datetime.now() passes in the afternoon and
+# fails at night, when every day-shift doctor is correctly off duty.
+FROZEN_NOW = datetime(2026, 9, 4, 15, 0, 0)
 
 
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "live_llm: allow this test to make real model API calls"
     )
+    config.addinivalue_line(
+        "markers", "real_clock: let this test read the actual wall clock"
+    )
+
+
+@pytest.fixture(autouse=True)
+def frozen_clock(request, monkeypatch):
+    """Pins shift and dispatch time so roster behaviour is reproducible."""
+    if "real_clock" in request.keywords:
+        yield
+        return
+    monkeypatch.setattr(clock, "now", lambda: FROZEN_NOW)
+    yield
 
 
 @pytest.fixture(autouse=True)

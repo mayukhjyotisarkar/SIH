@@ -9,6 +9,8 @@ privileged to do, and whether they can be interrupted right now.
 import hashlib
 import uuid
 from datetime import datetime
+
+from app.services import clock
 from typing import Dict, List, Optional, Tuple
 
 from app.models import DoctorAccount, DoctorDutyStatus, DutyState
@@ -173,7 +175,7 @@ class DoctorService:
         """True if `now` falls inside the shift, handling windows that cross midnight."""
         if not start or not end:
             return False
-        now = now or datetime.now()
+        now = now or clock.now()
         try:
             sh, sm = (int(x) for x in start.split(":"))
             eh, em = (int(x) for x in end.split(":"))
@@ -202,14 +204,15 @@ class DoctorService:
         duty.interruptible = duty.dutyState != "in_procedure"
         return duty
 
-    def set_duty_state(self, doctor_id: str, state: DutyState) -> Optional[DoctorDutyStatus]:
+    def set_duty_state(self, doctor_id: str, state: DutyState,
+                       now: Optional[datetime] = None) -> Optional[DoctorDutyStatus]:
         duty = self._duty.get(doctor_id)
         if duty is None:
             return None
         duty.dutyState = state
         duty.interruptible = state != "in_procedure"
         self._explicit_state[doctor_id] = True
-        return self.get_duty(doctor_id)
+        return self.get_duty(doctor_id, now)
 
     def record_assignment(self, doctor_id: str, acuity_weight: float = 1.0) -> Optional[DoctorDutyStatus]:
         """

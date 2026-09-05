@@ -26,6 +26,8 @@ The policy is therefore built on four ideas:
 """
 import re
 from datetime import datetime
+
+from app.services import clock
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models import (
@@ -344,7 +346,7 @@ class DispatchService:
     def _minutes_until_shift_end(shift_end: str, now: Optional[datetime] = None) -> Optional[int]:
         if not shift_end:
             return None
-        now = now or datetime.now()
+        now = now or clock.now()
         try:
             eh, em = (int(x) for x in shift_end.split(":"))
         except ValueError:
@@ -359,7 +361,7 @@ class DispatchService:
 
     @classmethod
     def propose(cls, session: Any, now: Optional[datetime] = None) -> DispatchProposal:
-        now = now or datetime.now()
+        now = now or clock.now()
         red_flag = getattr(session, "redFlag", None)
         reason = getattr(red_flag, "reason", "") if red_flag else ""
         triage = getattr(session, "triageScore", None)
@@ -547,7 +549,7 @@ class DispatchService:
         Assigns the case automatically and offers it to the best candidate.
         Idempotent: an existing record is swept for expiry and returned.
         """
-        now = now or datetime.now()
+        now = now or clock.now()
         session_id = getattr(session, "sessionId", "")
         existing = cls._records.get(session_id)
         if existing is not None:
@@ -577,7 +579,7 @@ class DispatchService:
         with no scheduler in the process, a record is only ever observed through
         a read, so sweeping here gives the same result without a task loop.
         """
-        now = now or datetime.now()
+        now = now or clock.now()
         record = cls._records.get(getattr(session, "sessionId", ""))
         if record is None or record.status != "pending" or record.currentOffer is None:
             return record
@@ -601,7 +603,7 @@ class DispatchService:
     @classmethod
     def accept(cls, session: Any, doctor: DoctorAccount,
                now: Optional[datetime] = None) -> DispatchRecord:
-        now = now or datetime.now()
+        now = now or clock.now()
         record = cls.sweep(session, now)
         if record is None:
             raise ValueError("No dispatch record for this session")
@@ -625,7 +627,7 @@ class DispatchService:
     @classmethod
     def decline(cls, session: Any, doctor: DoctorAccount, reason: str,
                 now: Optional[datetime] = None) -> DispatchRecord:
-        now = now or datetime.now()
+        now = now or clock.now()
         record = cls.sweep(session, now)
         if record is None:
             raise ValueError("No dispatch record for this session")
