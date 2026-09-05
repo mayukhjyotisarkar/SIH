@@ -36,6 +36,21 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def clean_shared_state():
+    """
+    The event log and bed board are process-wide, so one test's admissions would
+    otherwise fill the ward for the next.
+    """
+    from app.services.bed_service import bed_service
+    from app.services.event_log import event_log
+    event_log.reset()
+    bed_service.reset()
+    yield
+    event_log.reset()
+    bed_service.reset()
+
+
+@pytest.fixture(autouse=True)
 def frozen_clock(request, monkeypatch):
     """Pins shift and dispatch time so roster behaviour is reproducible."""
     if "real_clock" in request.keywords:

@@ -43,8 +43,23 @@ from app.services.triage_service import TriageService
 from app.services.fhir_service import FHIRService
 from app.services.drug_matching_service import DrugMatchingService
 
+from app.services.event_log import event_log
+from app.services.bed_service import bed_service
+
 # Ensure sample images exist on disk on startup
 ocr_service.ensure_sample_images_exist()
+
+# --- Wire the policies onto the shared event log -------------------------
+# Each policy joins by subscribing rather than by being called. Bed management
+# needed no change to dispatch, to the emergency endpoints, or to the kiosk --
+# it subscribes to the fact that a doctor accepted a case and reacts. The
+# websocket fan-out is now one subscriber among several rather than the
+# transport itself, so a dashboard being disconnected loses nothing.
+event_log.subscribe("*", staff_service.push_to_dashboards, "staff_dashboards")
+event_log.subscribe("emergency_dispatch_accepted", bed_service.on_dispatch_accepted,
+                    "bed_management")
+event_log.subscribe("physician_record_saved", bed_service.on_record_completed,
+                    "bed_release")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -995,9 +1010,13 @@ async def accept_dispatch(
     await staff_service.broadcast_event("emergency_dispatch_accepted", {
         "sessionId": session_id,
         "tokenNumber": session.tokenNumber,
+        "patientName": session.patientName,
         "doctorId": record.acceptedByDoctorId,
         "doctorName": record.acceptedByName,
-        "condition": record.condition
+        "condition": record.condition,
+        # Bed allocation reads acuity off this event -- it never calls dispatch.
+        "acuityWeight": record.acuityWeight,
+        "actor": f"doctor:{record.acceptedByDoctorId}",
     })
     return record
 
@@ -1061,6 +1080,57 @@ async def benchmark_dispatch_policies(
         "seed": seed,
         "results": DispatchSimulation(seed=seed).compare(count=cases)
     }
+
+# --- EVENT LOG & BED MANAGEMENT ---
+
+@app.get("/api/events")
+async def get_event_log(
+    sessionId: Optional[str] = Query(None),
+    type: Optional[str] = Query(None, description="exact, or a prefix like 'bed.*'"),
+    since: int = Query(0, description="return events after this sequence number"),
+    limit: int = Query(100, ge=1, le=1000),
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """
+    The hospital's ordered record of what happened. Every policy decision, its
+    actor, and the event that caused it -- which is what makes the autonomous
+    parts auditable rather than merely fast.
+    """
+    if sessionId:
+        events = event_log.for_session(sessionId)
+    elif type:
+        events = event_log.of_type(type)
+    elif since:
+        events = event_log.since(since, limit)
+    else:
+        events = event_log.all(limit)
+    return {"count": len(events), "events": [e.to_dict() for e in events[-limit:]]}
+
+@app.get("/api/events/{event_id}/why")
+async def explain_event(
+    event_id: str,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    """Walks causedBy back to the originating fact: why did this happen?"""
+    chain = event_log.causal_chain(event_id)
+    if not chain:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return {"chain": [e.to_dict() for e in chain]}
+
+@app.get("/api/beds")
+async def get_bed_board(doctor: DoctorAccount = Depends(get_current_doctor)):
+    """Live bed board with occupancy by class."""
+    return bed_service.occupancy()
+
+@app.get("/api/beds/session/{session_id}")
+async def get_bed_allocation(
+    session_id: str,
+    doctor: DoctorAccount = Depends(get_current_doctor)
+):
+    allocation = bed_service.allocations.get(session_id)
+    if not allocation:
+        raise HTTPException(status_code=404, detail="No bed allocation for this session")
+    return allocation.to_dict()
 
 @app.get("/api/staff/sessions")
 async def get_staff_sessions(staff: StaffAccount = Depends(get_current_staff)):
@@ -1355,6 +1425,16 @@ async def finalize_physician_record(session_id: str, doctor: DoctorAccount = Dep
     session.status = "completed"
     session.physicianReviewStatus = "Accepted"
     session_store.update_session(session_id, session)
+
+    # Closing the visit is a fact others act on -- bed management frees the bed
+    # off this event rather than being told to.
+    await staff_service.broadcast_event("physician_record_saved", {
+        "sessionId": session.sessionId,
+        "visitId": session.visitId,
+        "tokenNumber": session.tokenNumber,
+        "patientName": session.patientName,
+        "actor": f"doctor:{doctor.doctorId}",
+    })
 
     return {
         "status": "saved",
