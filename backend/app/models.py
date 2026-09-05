@@ -164,7 +164,9 @@ class PriorInvestigation(BaseModel):
     timestamp: str
     imageUrl: Optional[str] = None
     status: Literal["success", "needs_review", "failed"] = "success"
-    extractionSource: Literal["vision_llm", "local_ocr_fallback", "sample_curated", "manual_correction"] = "sample_curated"
+    # "extraction_failed" is distinct from a low-confidence read: nothing was
+    # extracted at all, and the caller must not treat the payload as content.
+    extractionSource: Literal["vision_llm", "local_ocr_fallback", "sample_curated", "manual_correction", "extraction_failed"] = "sample_curated"
     clarificationStatus: Literal["not_needed", "in_progress", "completed", "escalated_to_staff"] = "not_needed"
 
 class DocumentManualCorrectionRequest(BaseModel):

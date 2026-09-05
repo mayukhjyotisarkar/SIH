@@ -269,13 +269,31 @@ class OCRService:
         # 4. Fallback if Vision API is unavailable or returned empty
         if not extracted_data or confidence == 0:
             if is_pdf_doc and pdf_text:
+                # Legitimate: this reads text genuinely embedded in the PDF.
                 extracted_data, confidence, doc_type, flag, source = cls._extract_from_pdf_text(
                     filename, pdf_text
                 )
             else:
-                extracted_data, confidence, doc_type, flag, source = cls._deterministic_local_extraction(
-                    filename, file_bytes
-                )
+                # There is no local OCR. The previous fallback guessed content
+                # from the FILENAME and returned it with a confidence score, so a
+                # failed vision call produced invented medications that had never
+                # been in the image. Report the failure instead: a clinician
+                # acting on fabricated drug names is far worse than a blank result.
+                extracted_data = {
+                    "medications": [],
+                    "diagnoses": [],
+                    "investigations": [],
+                    "extractionError": (
+                        "Could not read this document. The vision model did not "
+                        "return a usable result -- it may have timed out, been "
+                        "rate-limited, or the image may be too blurred to read."
+                    ),
+                }
+                confidence = 0.0
+                doc_type = "other"
+                flag = ("EXTRACTION FAILED - nothing was read from this document. "
+                        "Retake the photo in better light, or enter the details manually.")
+                source = "extraction_failed"
 
         # 5. Multi-Factor Quality & Confidence Evaluation Engine
         breakdown, quality_assessment, base_conf = cls._evaluate_document_quality_and_confidence(
@@ -298,6 +316,15 @@ class OCRService:
         status = "success"
         if final_conf < 0.75 or cross_check_status in ["discrepancy_flagged", "low_quality_alert"] or quality_assessment in ["poor_handwriting", "blurry_or_damaged"]:
             status = "needs_review"
+
+        # The quality engine scores the SHAPE of the payload, so an empty result
+        # scored well-formed and came back at 0.92. Nothing was read, so no
+        # confidence figure is meaningful here.
+        if source == "extraction_failed":
+            final_conf = 0.0
+            quality_assessment = "blurry_or_damaged"
+            cross_check_status = "low_quality_alert"
+            status = "failed"
 
         # Generate typed ExtractedMedicationItem instances for prescriptions
         med_items = None
@@ -1122,8 +1149,16 @@ OUTPUT STRICT JSON ONLY:
                         "response_mime_type": "application/json"
                     }
                 }
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                # Vision on a full-resolution handwritten prescription regularly
+                # takes longer than 15s. A timeout here used to look like an
+                # unreadable document rather than a call that never finished.
+                async with httpx.AsyncClient(timeout=90.0) as client:
                     resp = await client.post(url, json=payload)
+                    if resp.status_code != 200:
+                        # Rate limits, invalid keys and quota errors all land here.
+                        # Previously they fell through in complete silence.
+                        print(f"[Vision LLM] Gemini returned HTTP {resp.status_code}: "
+                              f"{resp.text[:300]}")
                     if resp.status_code == 200:
                         data = resp.json()
                         text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -1140,7 +1175,10 @@ OUTPUT STRICT JSON ONLY:
                             "vision_llm"
                         )
             except Exception as e:
-                print(f"[Vision LLM Error]: {e}")
+                print(f"[Vision LLM Error] {type(e).__name__}: {e}")
+        elif not settings.GEMINI_API_KEY:
+            print("[Vision LLM] No GEMINI_API_KEY set -- image OCR is unavailable. "
+                  "Groq and OpenRouter run text-only models and cannot read an image.")
 
         return ({}, 0.0, "other", None, "local_ocr_fallback")
 

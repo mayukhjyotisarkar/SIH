@@ -209,10 +209,10 @@ class MedicationClarificationService:
 
             # Extract strength from name if embedded (e.g. Amoxyclav 625mg)
             strength = ""
-            str_match = re.search(r'(\d+\s*(?:mg|g|mcg|ml|iu))', name, re.IGNORECASE)
+            str_match = re.search(r'(\d[\d,]*(?:\.\d+)?\s*[kK]?\s*(?:mg|g|mcg|ml|iu))', name, re.IGNORECASE)
             if str_match:
                 strength = str_match.group(1).strip()
-            elif str_match := re.search(r'(\d+\s*(?:mg|g|mcg|ml|iu))', dosage, re.IGNORECASE):
+            elif str_match := re.search(r'(\d[\d,]*(?:\.\d+)?\s*[kK]?\s*(?:mg|g|mcg|ml|iu))', dosage, re.IGNORECASE):
                 strength = str_match.group(1).strip()
 
             # Analyze field-level confidences
